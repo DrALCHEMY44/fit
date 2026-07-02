@@ -11,7 +11,8 @@ import {
   ChevronLeft, Database, Layers, Cpu, Camera, Wallet, Eye,
   ThumbsUp, AlertCircle, Circle, RotateCcw, Hash, Pencil,
   Building2, LayoutDashboard, FileCheck, ChevronUp, Lock, Info,
-  CreditCard, Loader2,
+  CreditCard, Loader2, Sparkles, CalendarDays, GraduationCap,
+  GitBranch, Languages, Smartphone, Shield, Brain, Calendar,
 } from "lucide-react";
 
 type View =
@@ -26,8 +27,11 @@ type View =
   | "login"
   | "signup"
   | "account"
-  | "buy-connects";
-type Role = "guest" | "freelancer" | "client";
+  | "buy-connects"
+  | "internships"
+  | "admin";
+type Lang = "en" | "fr";
+type Role = "guest" | "freelancer" | "client" | "admin";
 
 // ─── MOCK DATA ──────────────────────────────────────────────────────────────
 
@@ -371,6 +375,203 @@ function MilestoneStatus({ status }: { status: string }) {
   );
 }
 
+// ─── ADMIN MOCK DATA ──────────────────────────────────────────────────────────
+
+const ADMIN_USERS_LIST = [
+  { id: 1, name: "Diane Ngono", email: "diane.ngono@gmail.com", phone: "+237 677 889 900", country: "Cameroon", role: "freelancer", status: "active", verified: "verified", dateJoined: "Jan 12, 2025", photo: "DN" },
+  { id: 2, name: "Kwame Asante", email: "kwame.asante@yahoo.com", phone: "+233 24 555 6677", country: "Ghana", role: "freelancer", status: "active", verified: "verified", dateJoined: "Feb 18, 2025", photo: "KA" },
+  { id: 3, name: "Afrikart Commerce", email: "contact@afrikart.com", phone: "+237 699 112 233", country: "Cameroon", role: "client", status: "active", verified: "verified", dateJoined: "Mar 02, 2025", photo: "AC" },
+  { id: 4, name: "GreenField AgriTech", email: "info@greenfield.io", phone: "+234 803 444 5555", country: "Nigeria", role: "client", status: "active", verified: "pending", dateJoined: "Apr 22, 2025", photo: "GA" },
+  { id: 5, name: "Marc Ndjock", email: "m.ndjock@outlook.fr", phone: "+237 655 443 322", country: "Cameroon", role: "freelancer", status: "suspended", verified: "unverified", dateJoined: "May 10, 2025", photo: "MN" },
+  { id: 6, name: "Sylvie Eko", email: "sylvie.eko@gmail.com", phone: "+237 671 223 344", country: "Cameroon", role: "freelancer", status: "active", verified: "pending", dateJoined: "Jun 14, 2025", photo: "SE" },
+];
+
+const ADMIN_PROJECTS_LIST = [
+  { id: 101, name: "CEMAC FinTech Dashboard", client: "MTN FinTech Lab", freelancer: "Diane Ngono", budget: "XAF 850,000", deadline: "July 10, 2025", status: "In Progress" },
+  { id: 102, name: "AgriTrack Mobile App", client: "GreenField AgriTech", freelancer: "Kwame Asante", budget: "USD 2,400", deadline: "Aug 15, 2025", status: "Open" },
+  { id: 103, name: "Afrikart E-Commerce Platform", client: "Afrikart Commerce", freelancer: "Diane Ngono", budget: "USD 4,200", deadline: "June 20, 2025", status: "Completed" },
+  { id: 104, name: "Legal Document Translation", client: "TechAfrique Media", freelancer: "Sylvie Eko", budget: "XAF 120,000", deadline: "July 01, 2025", status: "Cancelled" },
+];
+
+const ADMIN_TRANSACTIONS_LIST = [
+  { id: "TXN-88291", client: "MTN FinTech Lab", freelancer: "Diane Ngono", amount: "XAF 850,000", method: "MTN Mobile Money", status: "Escrow Funded", date: "June 25, 2025" },
+  { id: "TXN-88292", client: "Afrikart Commerce", freelancer: "Diane Ngono", amount: "USD 4,200", method: "Visa Card", status: "Released", date: "June 20, 2025" },
+  { id: "TXN-88293", client: "GreenField AgriTech", freelancer: "Kwame Asante", amount: "USD 600", method: "PayPal", status: "Refunded", date: "June 18, 2025" },
+  { id: "TXN-88294", client: "TechAfrique Media", freelancer: "Sylvie Eko", amount: "XAF 120,000", method: "Orange Money", status: "Released", date: "June 12, 2025" },
+];
+
+const ADMIN_WITHDRAWALS_LIST = [
+  { id: 1, freelancer: "Diane Ngono", amount: "XAF 450,000", method: "MTN MoMo", date: "June 28, 2025", status: "Pending" },
+  { id: 2, freelancer: "Kwame Asante", amount: "USD 1,200", method: "PayPal", date: "June 27, 2025", status: "Approved" },
+  { id: 3, freelancer: "Sylvie Eko", amount: "XAF 75,000", method: "Orange Money", date: "June 26, 2025", status: "Rejected" },
+];
+
+const ADMIN_DISPUTES_LIST = [
+  { id: "DSP-302", client: "GreenField AgriTech", freelancer: "Kwame Asante", project: "AgriTrack Mobile App", date: "June 24, 2025", status: "Open" },
+  { id: "DSP-303", client: "TechAfrique Media", freelancer: "Sylvie Eko", project: "Legal Document Translation", date: "June 22, 2025", status: "Resolved" },
+  { id: "DSP-304", client: "MTN FinTech Lab", freelancer: "Diane Ngono", project: "CEMAC FinTech Dashboard", date: "June 15, 2025", status: "Pending" },
+];
+
+const ADMIN_REVIEWS_LIST = [
+  { id: 1, reviewer: "MTN FinTech Lab", user: "Diane Ngono", rating: 5, comment: "Diane did an incredible job building our CEMAC mobile money integration! Very professional.", date: "June 26, 2025", hidden: false },
+  { id: 2, reviewer: "Sylvie Eko", user: "TechAfrique Media", rating: 2, comment: "Client kept changing project requirements without adjusting the milestone budget.", date: "June 24, 2025", hidden: false },
+  { id: 3, reviewer: "Afrikart Commerce", user: "Diane Ngono", rating: 5, comment: "Exceptional UI coding and robust backend integration. Will hire again.", date: "June 20, 2025", hidden: false },
+];
+
+const ADMIN_CATEGORIES_LIST = [
+  { id: 1, name: "Software Development", icon: "Code", count: 148 },
+  { id: 2, name: "Design & Creative", icon: "PenTool", count: 96 },
+  { id: 3, name: "Writing & Translation", icon: "FileText", count: 54 },
+  { id: 4, name: "Marketing & Sales", icon: "TrendingUp", count: 42 },
+];
+
+const ADMIN_SKILLS_LIST = [
+  { id: 1, skill: "React", category: "Software Development", count: 85 },
+  { id: 2, skill: "TypeScript", category: "Software Development", count: 64 },
+  { id: 3, skill: "Figma", category: "Design & Creative", count: 72 },
+  { id: 4, skill: "Flutter", category: "Software Development", count: 34 },
+];
+
+const ADMIN_NOTIFICATIONS_LIST = [
+  { id: 1, title: "Scheduled Maintenance", message: "FIT platform will be down for 2 hours on Sunday, July 6th.", audience: "All Users", date: "June 28, 2025" },
+  { id: 2, title: "New Connects Rules", message: "Connects prices updated in XAF. Please check packages.", audience: "Freelancers", date: "June 25, 2025" },
+];
+
+const ADMIN_COUPONS_LIST = [
+  { id: 1, code: "WELCOME237", discount: "15%", expiryDate: "Dec 31, 2025", status: "Active" },
+  { id: 2, code: "MOMO5", discount: "5%", expiryDate: "Aug 30, 2025", status: "Active" },
+  { id: 3, code: "EXPIRED50", discount: "50%", expiryDate: "May 01, 2025", status: "Expired" },
+];
+
+const ADMIN_COUNTRIES_LIST = [
+  { id: 1, country: "Cameroon", currency: "XAF", status: "Active" },
+  { id: 2, country: "Ivory Coast", currency: "XOF", status: "Active" },
+  { id: 3, country: "Nigeria", currency: "NGN", status: "Active" },
+  { id: 4, country: "Ghana", currency: "GHS", status: "Active" },
+];
+
+const ADMIN_BLOGS_LIST = [
+  { id: 1, title: "How Mobile Money is Transforming African Freelancing", category: "FinTech", status: "Published", date: "June 26, 2025" },
+  { id: 2, title: "Top 10 High-Income Tech Skills to Learn in Cameroon in 2025", category: "Education", status: "Draft", date: "June 24, 2025" },
+];
+
+const ADMIN_PLANS_LIST = [
+  { id: 1, name: "Free Tier", price: "XAF 0", billing: "forever", subscribers: 1240 },
+  { id: 2, name: "Pro Plan", price: "XAF 5,000", billing: "month", subscribers: 420 },
+  { id: 3, name: "Business Plan", price: "XAF 15,000", billing: "month", subscribers: 110 },
+  { id: 4, name: "Enterprise Plan", price: "XAF 45,000", billing: "year", subscribers: 15 },
+];
+
+// ─── TRANSLATIONS & i18n ────────────────────────────────────────────────────
+
+const T: Record<string, Record<Lang, string>> = {
+  adminView: { en: "Admin View", fr: "Vue Admin" },
+  findWork: { en: "Find Work", fr: "Trouver du Travail" },
+  findTalent: { en: "Find Talent", fr: "Trouver un Talent" },
+  whyFit: { en: "Why FIT", fr: "Pourquoi FIT" },
+  internships: { en: "Internships", fr: "Stages" },
+  logIn: { en: "Log In", fr: "Connexion" },
+  getStarted: { en: "Get Started", fr: "Commencer" },
+  messages: { en: "Messages", fr: "Messages" },
+  myJobs: { en: "My Jobs", fr: "Mes Projets" },
+  clientView: { en: "Client View", fr: "Vue Client" },
+  freelancerView: { en: "Freelancer View", fr: "Vue Freelance" },
+  heroTag: { en: "Africa's Premier Freelance Marketplace", fr: "La Première Plateforme Freelance d'Afrique" },
+  heroTitle1: { en: "Connecting Talents,", fr: "Connecter les Talents," },
+  heroTitle2: { en: "Building Dreams.", fr: "Construire des Rêves." },
+  heroDesc: { en: "FREELANCE INTERCONNECT (FIT) bridges the gap between exceptional African talent and the world's best opportunities. Post jobs in XAF or USD. Hire verified freelancers from Cameroon and across the continent.", fr: "FREELANCE INTERCONNECT (FIT) comble le fossé entre les talents exceptionnels d'Afrique et les meilleures opportunités mondiales. Publiez des offres en XAF ou USD. Recrutez des freelances vérifiés du Cameroun et du continent." },
+  postJob: { en: "Post a Job — Free", fr: "Publier un Projet — Gratuit" },
+  joinFreelancer: { en: "Join as a Freelancer", fr: "Rejoindre en tant que Freelance" },
+  freeToJoin: { en: "Free to join", fr: "Inscription gratuite" },
+  noSubscription: { en: "No subscription fees", fr: "Aucun abonnement" },
+  xafUsdPayments: { en: "XAF & USD payments", fr: "Paiements XAF & USD" },
+  browseByCategory: { en: "Browse by Category", fr: "Parcourir par Catégorie" },
+  exploreOpportunities: { en: "Explore opportunities in your field of expertise", fr: "Découvrez les opportunités dans votre domaine" },
+  viewAllCategories: { en: "View all categories", fr: "Voir toutes les catégories" },
+  howFitWorks: { en: "How FIT Works", fr: "Comment FIT Fonctionne" },
+  howFitWorksDesc: { en: "Go from idea to done — in four simple steps", fr: "De l'idée à la réalisation — en quatre étapes simples" },
+  topTalent: { en: "Top Talent on FIT", fr: "Meilleurs Talents sur FIT" },
+  topTalentDesc: { en: "Vetted professionals ready to work", fr: "Professionnels vérifiés prêts à travailler" },
+  browseAllTalent: { en: "Browse all talent", fr: "Voir tous les talents" },
+  readyToStart: { en: "Ready to get started?", fr: "Prêt à commencer ?" },
+  readyToStartDesc: { en: "Join thousands of African freelancers and businesses already growing with FIT.", fr: "Rejoignez des milliers de freelances et d'entreprises africaines qui grandissent déjà avec FIT." },
+  builtForCameroon: { en: "Built for Cameroon & Africa", fr: "Conçu pour le Cameroun & l'Afrique" },
+  builtForCameroonDesc: { en: "Every feature is designed for the way Africa works", fr: "Chaque fonctionnalité est conçue pour la façon dont l'Afrique travaille" },
+  aiMatching: { en: "AI-Powered Matching", fr: "Matching Propulsé par l'IA" },
+  aiMatchingDesc: { en: "Tell us what you need — our AI finds your perfect freelancer", fr: "Dites-nous ce dont vous avez besoin — notre IA trouve le freelance parfait" },
+  describeProject: { en: "Describe your project and required skills...", fr: "Décrivez votre projet et les compétences requises..." },
+  findMyMatch: { en: "Find My Match", fr: "Trouver mon Match" },
+  internshipHub: { en: "Internship Hub", fr: "Espace Stages" },
+  internshipHubDesc: { en: "Launch your career with Africa's top companies", fr: "Lancez votre carrière avec les meilleures entreprises d'Afrique" },
+  browseInternships: { en: "Browse Internships", fr: "Voir les Stages" },
+  forStudents: { en: "For Students & Graduates", fr: "Pour Étudiants & Diplômés" },
+  scheduleInterview: { en: "Schedule Interview", fr: "Planifier un Entretien" },
+  footerTagline: { en: "Connecting Talents, Building Dreams — across Cameroon and the African continent.", fr: "Connecter les Talents, Construire des Rêves — à travers le Cameroun et le continent africain." },
+  platform: { en: "Platform", fr: "Plateforme" },
+  company: { en: "Company", fr: "Entreprise" },
+  support: { en: "Support", fr: "Support" },
+  english: { en: "English", fr: "Français" },
+};
+
+// ─── LANGUAGE CONTEXT ───────────────────────────────────────────────────────
+
+const LangContext = (() => {
+  let _lang: Lang = "en";
+  let _listeners: Array<() => void> = [];
+  return {
+    get: () => _lang,
+    set: (l: Lang) => { _lang = l; _listeners.forEach(fn => fn()); },
+    subscribe: (fn: () => void) => { _listeners.push(fn); return () => { _listeners = _listeners.filter(f => f !== fn); }; },
+  };
+})();
+
+function useLang(): [Lang, (l: Lang) => void] {
+  const [lang, setLangState] = useState<Lang>(LangContext.get());
+  useEffect(() => {
+    const unsub = LangContext.subscribe(() => setLangState(LangContext.get()));
+    return unsub;
+  }, []);
+  const setLang = (l: Lang) => { LangContext.set(l); };
+  return [lang, setLang];
+}
+
+function t(key: string, lang: Lang): string {
+  return T[key]?.[lang] ?? T[key]?.en ?? key;
+}
+
+// ─── INTERNSHIP MOCK DATA ───────────────────────────────────────────────────
+
+const INTERNSHIPS = [
+  { id: 1, title: "Frontend Engineering Intern", company: "MTN Innovation Lab", location: "Douala, Cameroon", duration: "3 months", stipend: "XAF 150,000/mo", skills: ["React", "TypeScript", "CSS"], type: "Hybrid", paid: true, description: "Work alongside senior engineers building the next generation of mobile money dashboards. Learn React, design systems, and agile development." },
+  { id: 2, title: "UI/UX Design Intern", company: "Afrikart Commerce", location: "Yaoundé, Cameroon", duration: "4 months", stipend: "XAF 120,000/mo", skills: ["Figma", "Adobe XD", "Prototyping"], type: "Remote", paid: true, description: "Help redesign the Afrikart mobile app experience. Collaborate with product managers on user research and prototyping." },
+  { id: 3, title: "Data Science Intern", company: "GreenField AgriTech", location: "Bamenda, Cameroon", duration: "6 months", stipend: "XAF 200,000/mo", skills: ["Python", "SQL", "Machine Learning"], type: "On-site", paid: true, description: "Analyze agricultural data from IoT sensors across 3 West African countries. Build predictive models for crop yield optimization." },
+  { id: 4, title: "Backend Developer Intern", company: "CloudOps Cameroon", location: "Bafoussam, Cameroon", duration: "3 months", stipend: "XAF 100,000/mo", skills: ["Node.js", "PostgreSQL", "Docker"], type: "Remote", paid: true, description: "Contribute to our cloud infrastructure platform. Write APIs, optimize databases, and learn DevOps best practices." },
+  { id: 5, title: "Content & Social Media Intern", company: "TechAfrique Media", location: "Douala, Cameroon", duration: "3 months", stipend: "Unpaid", skills: ["Content Writing", "French", "SEO"], type: "Remote", paid: false, description: "Create bilingual content about Africa's tech ecosystem. Manage social media accounts and track engagement analytics." },
+];
+
+// ─── AI MATCHING MOCK RESULTS ───────────────────────────────────────────────
+
+const AI_MATCH_RESULTS = [
+  { name: "Diane Ngono", initials: "DN", gradient: "from-[#0284C7] to-[#06B6D4]", title: "Full-Stack Developer", matchScore: 98, skills: ["React", "Node.js", "TypeScript"], reason: "5+ years in FinTech dashboards, XAF payment integrations" },
+  { name: "Emmanuel Fru", initials: "EF", gradient: "from-[#16A34A] to-[#34D399]", title: "Mobile Developer", matchScore: 94, skills: ["Flutter", "Firebase", "Dart"], reason: "Built 3 mobile money apps, offline-first architecture expert" },
+  { name: "Aminata Diallo", initials: "AD", gradient: "from-[#7C3AED] to-[#A78BFA]", title: "UI/UX Designer", matchScore: 91, skills: ["Figma", "React", "CSS"], reason: "Specialized in fintech UIs, bilingual FR/EN" },
+];
+
+// ─── BUILT FOR CAMEROON FEATURES ────────────────────────────────────────────
+
+const PLATFORM_FEATURES = [
+  { icon: Smartphone, title: { en: "MTN & Orange Money", fr: "MTN & Orange Money" }, desc: { en: "Pay and get paid via mobile money — instant XAF transactions", fr: "Payez et recevez via Mobile Money — transactions XAF instantanées" }, color: "from-[#FBBF24] to-[#F59E0B]" },
+  { icon: DollarSign, title: { en: "FCFA & USD Pricing", fr: "Tarification FCFA & USD" }, desc: { en: "Set budgets in XAF or USD with live currency conversion", fr: "Définissez vos budgets en XAF ou USD avec conversion en direct" }, color: "from-[#16A34A] to-[#34D399]" },
+  { icon: Languages, title: { en: "English & French", fr: "Anglais & Français" }, desc: { en: "Full bilingual interface — switch languages anytime", fr: "Interface entièrement bilingue — changez de langue à tout moment" }, color: "from-[#0284C7] to-[#06B6D4]" },
+  { icon: ShieldCheck, title: { en: "Verified Freelancers", fr: "Freelances Vérifiés" }, desc: { en: "ID-verified profiles with skill assessments and ratings", fr: "Profils vérifiés avec évaluations et notes de compétences" }, color: "from-[#7C3AED] to-[#A78BFA]" },
+  { icon: Wallet, title: { en: "Escrow Payments", fr: "Paiements Escrow" }, desc: { en: "Funds held securely until work is approved by both parties", fr: "Fonds sécurisés jusqu'à l'approbation du travail par les deux parties" }, color: "from-[#0891B2] to-[#22D3EE]" },
+  { icon: Brain, title: { en: "AI Freelancer Matching", fr: "Matching IA" }, desc: { en: "Our AI analyzes your project to find the best-fit talent", fr: "Notre IA analyse votre projet pour trouver le talent idéal" }, color: "from-[#DB2777] to-[#F472B6]" },
+  { icon: GitBranch, title: { en: "GitHub Integration", fr: "Intégration GitHub" }, desc: { en: "Link repos, showcase contributions on your profile", fr: "Liez vos dépôts, affichez vos contributions sur votre profil" }, color: "from-[#0D1117] to-[#334155]" },
+  { icon: GraduationCap, title: { en: "Internship Hub", fr: "Espace Stages" }, desc: { en: "Students and graduates can find internships at top companies", fr: "Étudiants et diplômés trouvent des stages dans les meilleures entreprises" }, color: "from-[#6366F1] to-[#818CF8]" },
+  { icon: Video, title: { en: "Video Interviews", fr: "Entretiens Vidéo" }, desc: { en: "Schedule and conduct interviews right on the platform", fr: "Planifiez et réalisez des entretiens directement sur la plateforme" }, color: "from-[#D97706] to-[#FBBF24]" },
+  { icon: MessageSquare, title: { en: "Real-time Chat", fr: "Chat en Temps Réel" }, desc: { en: "Instant messaging with file sharing and offer tools", fr: "Messagerie instantanée avec partage de fichiers et outils d'offre" }, color: "from-[#0F766E] to-[#2DD4BF]" },
+];
+
 // ─── NAVBAR ─────────────────────────────────────────────────────────────────
 
 function Navbar({ view, role, onNavigate, onRoleSwitch }: {
@@ -379,6 +580,7 @@ function Navbar({ view, role, onNavigate, onRoleSwitch }: {
   onRoleSwitch: (r: Role) => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [lang, setLang] = useLang();
   const isDark = view === "landing";
 
   const navBg = isDark ? "bg-[#0D1117]" : "bg-white border-b border-border";
@@ -397,34 +599,49 @@ function Navbar({ view, role, onNavigate, onRoleSwitch }: {
         <nav className="hidden md:flex items-center gap-1">
           {role === "guest" && (
             <>
-              <button onClick={() => { onRoleSwitch("freelancer"); onNavigate("freelancer"); }} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${textCls}`}>Find Work</button>
-              <button onClick={() => { onRoleSwitch("client"); onNavigate("talent"); }} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${textCls}`}>Find Talent</button>
-              <a href="#" className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${textCls}`}>Why FIT</a>
+              <button onClick={() => { onRoleSwitch("freelancer"); onNavigate("freelancer"); }} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${textCls}`}>{t("findWork", lang)}</button>
+              <button onClick={() => { onRoleSwitch("client"); onNavigate("talent"); }} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${textCls}`}>{t("findTalent", lang)}</button>
+              <button onClick={() => onNavigate("internships")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "internships" ? "text-[#0284C7] bg-blue-50" : textCls}`}>{t("internships", lang)}</button>
+              <a href="#" className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${textCls}`}>{t("whyFit", lang)}</a>
             </>
           )}
           {role === "freelancer" && (
             <>
-              <button onClick={() => onNavigate("freelancer")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "freelancer" ? "text-[#0284C7] bg-blue-50" : textCls}`}>Find Work</button>
-              <button onClick={() => onNavigate("contracts")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "contracts" ? "text-[#0284C7] bg-blue-50" : textCls}`}>My Jobs</button>
-              <button onClick={() => onNavigate("messages")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "messages" ? "text-[#0284C7] bg-blue-50" : textCls}`}>Messages</button>
+              <button onClick={() => onNavigate("freelancer")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "freelancer" ? "text-[#0284C7] bg-blue-50" : textCls}`}>{t("findWork", lang)}</button>
+              <button onClick={() => onNavigate("contracts")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "contracts" ? "text-[#0284C7] bg-blue-50" : textCls}`}>{t("myJobs", lang)}</button>
+              <button onClick={() => onNavigate("internships")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "internships" ? "text-[#0284C7] bg-blue-50" : textCls}`}>{t("internships", lang)}</button>
+              <button onClick={() => onNavigate("messages")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "messages" ? "text-[#0284C7] bg-blue-50" : textCls}`}>{t("messages", lang)}</button>
             </>
           )}
           {role === "client" && (
             <>
-              <button onClick={() => onNavigate("talent")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "talent" ? "text-[#0284C7] bg-blue-50" : textCls}`}>Find Talent</button>
-              <button onClick={() => onNavigate("client")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "client" ? "text-[#0284C7] bg-blue-50" : textCls}`}>My Jobs</button>
-              <button onClick={() => onNavigate("messages")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "messages" ? "text-[#0284C7] bg-blue-50" : textCls}`}>Messages</button>
+              <button onClick={() => onNavigate("talent")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "talent" ? "text-[#0284C7] bg-blue-50" : textCls}`}>{t("findTalent", lang)}</button>
+              <button onClick={() => onNavigate("client")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "client" ? "text-[#0284C7] bg-blue-50" : textCls}`}>{t("myJobs", lang)}</button>
+              <button onClick={() => onNavigate("internships")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "internships" ? "text-[#0284C7] bg-blue-50" : textCls}`}>{t("internships", lang)}</button>
+              <button onClick={() => onNavigate("messages")} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${view === "messages" ? "text-[#0284C7] bg-blue-50" : textCls}`}>{t("messages", lang)}</button>
             </>
           )}
         </nav>
 
         {/* Right Side */}
         <div className="flex items-center gap-2">
+          {/* Language Toggle */}
+          <button
+            onClick={() => setLang(lang === "en" ? "fr" : "en")}
+            className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${isDark ? "bg-white/10 text-slate-300 hover:bg-white/15 border border-white/10" : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-border"}`}
+            title={lang === "en" ? "Switch to French" : "Passer en anglais"}
+          >
+            <Globe size={12} />
+            <span className={lang === "en" ? "text-[#0284C7] font-bold" : ""}>EN</span>
+            <span className="opacity-40">|</span>
+            <span className={lang === "fr" ? "text-[#0284C7] font-bold" : ""}>FR</span>
+          </button>
+
           {role === "guest" ? (
             <>
-              <button onClick={() => onNavigate("login")} className={`hidden md:block text-sm font-medium px-4 py-2 rounded-lg transition-colors ${isDark ? "text-slate-300 hover:text-white" : "text-slate-700 hover:bg-slate-100"}`}>Log In</button>
+              <button onClick={() => onNavigate("login")} className={`hidden md:block text-sm font-medium px-4 py-2 rounded-lg transition-colors ${isDark ? "text-slate-300 hover:text-white" : "text-slate-700 hover:bg-slate-100"}`}>{t("logIn", lang)}</button>
               <button onClick={() => onNavigate("signup")} className="text-sm font-semibold px-4 py-2 rounded-lg bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white hover:opacity-90 transition-opacity">
-                Get Started
+                {t("getStarted", lang)}
               </button>
             </>
           ) : (
@@ -438,11 +655,26 @@ function Navbar({ view, role, onNavigate, onRoleSwitch }: {
               </button>
               <div className="flex items-center gap-2 pl-2 border-l border-border">
                 <button
-                  onClick={() => { onRoleSwitch(role === "freelancer" ? "client" : "freelancer"); onNavigate(role === "freelancer" ? "client" : "freelancer"); }}
+                  onClick={() => {
+                    let nextRole: Role = "freelancer";
+                    let nextView: View = "freelancer";
+                    if (role === "freelancer") {
+                      nextRole = "client";
+                      nextView = "client";
+                    } else if (role === "client") {
+                      nextRole = "admin";
+                      nextView = "admin";
+                    } else {
+                      nextRole = "freelancer";
+                      nextView = "freelancer";
+                    }
+                    onRoleSwitch(nextRole);
+                    onNavigate(nextView);
+                  }}
                   className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors text-xs font-medium text-slate-600"
                 >
                   <RotateCcw size={11} />
-                  {role === "freelancer" ? "Client View" : "Freelancer View"}
+                  {role === "freelancer" ? t("clientView", lang) : role === "client" ? t("adminView", lang) : t("freelancerView", lang)}
                 </button>
                 <button onClick={() => onNavigate("account")} className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0284C7] to-[#06B6D4] flex items-center justify-center text-white text-xs font-bold cursor-pointer hover:opacity-90 transition-opacity">
                   {role === "freelancer" ? "DN" : "AF"}
@@ -459,10 +691,16 @@ function Navbar({ view, role, onNavigate, onRoleSwitch }: {
       {/* Mobile Menu */}
       {mobileOpen && (
         <div className={`md:hidden border-t ${isDark ? "border-white/10 bg-[#111827]" : "border-border bg-white"} px-4 py-3 flex flex-col gap-1`}>
-          <button onClick={() => { onNavigate("freelancer"); setMobileOpen(false); }} className={`text-sm font-medium px-3 py-2 rounded-lg text-left ${textCls}`}>Find Work</button>
-          <button onClick={() => { onNavigate("talent"); setMobileOpen(false); }} className={`text-sm font-medium px-3 py-2 rounded-lg text-left ${textCls}`}>Find Talent</button>
-          <button onClick={() => { onNavigate("messages"); setMobileOpen(false); }} className={`text-sm font-medium px-3 py-2 rounded-lg text-left ${textCls}`}>Messages</button>
-          <button onClick={() => { onNavigate("contracts"); setMobileOpen(false); }} className={`text-sm font-medium px-3 py-2 rounded-lg text-left ${textCls}`}>Contracts</button>
+          <button onClick={() => { onNavigate("freelancer"); setMobileOpen(false); }} className={`text-sm font-medium px-3 py-2 rounded-lg text-left ${textCls}`}>{t("findWork", lang)}</button>
+          <button onClick={() => { onNavigate("talent"); setMobileOpen(false); }} className={`text-sm font-medium px-3 py-2 rounded-lg text-left ${textCls}`}>{t("findTalent", lang)}</button>
+          <button onClick={() => { onNavigate("internships"); setMobileOpen(false); }} className={`text-sm font-medium px-3 py-2 rounded-lg text-left ${textCls}`}>{t("internships", lang)}</button>
+          <button onClick={() => { onNavigate("messages"); setMobileOpen(false); }} className={`text-sm font-medium px-3 py-2 rounded-lg text-left ${textCls}`}>{t("messages", lang)}</button>
+          <button onClick={() => { onNavigate("contracts"); setMobileOpen(false); }} className={`text-sm font-medium px-3 py-2 rounded-lg text-left ${textCls}`}>{lang === "en" ? "Contracts" : "Contrats"}</button>
+          <div className="border-t border-border mt-2 pt-2">
+            <button onClick={() => setLang(lang === "en" ? "fr" : "en")} className={`flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg w-full text-left ${textCls}`}>
+              <Globe size={14} /> {lang === "en" ? "🇫🇷 Français" : "🇬🇧 English"}
+            </button>
+          </div>
         </div>
       )}
     </header>
@@ -497,6 +735,15 @@ const HOW_IT_WORKS = [
 ];
 
 function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => void; onRoleSwitch: (r: Role) => void }) {
+  const [lang] = useLang();
+  const [aiQuery, setAiQuery] = useState("");
+  const [showAiResults, setShowAiResults] = useState(false);
+
+  const handleAiMatch = () => {
+    if (!aiQuery.trim()) return;
+    setShowAiResults(true);
+  };
+
   return (
     <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       {/* Hero */}
@@ -510,17 +757,17 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-cyan-400 text-xs font-medium mb-6">
               <Zap size={12} />
-              Africa's Premier Freelance Marketplace
+              {t("heroTag", lang)}
             </div>
             <h1 className="text-4xl lg:text-6xl font-extrabold text-white leading-[1.08] tracking-tight mb-6">
-              Connecting Talents,
+              {t("heroTitle1", lang)}
               <br />
               <span className="bg-gradient-to-r from-[#0EA5E9] to-[#06B6D4] bg-clip-text text-transparent">
-                Building Dreams.
+                {t("heroTitle2", lang)}
               </span>
             </h1>
             <p className="text-lg text-slate-400 max-w-xl leading-relaxed mb-10">
-              FREELANCE INTERCONNECT (FIT) bridges the gap between exceptional African talent and the world's best opportunities. Post jobs in XAF or USD. Hire verified freelancers from Cameroon and across the continent.
+              {t("heroDesc", lang)}
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <button
@@ -528,20 +775,20 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
                 className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white font-semibold text-base hover:opacity-90 transition-opacity flex items-center gap-2 justify-center"
               >
                 <Briefcase size={18} />
-                Post a Job — Free
+                {t("postJob", lang)}
               </button>
               <button
                 onClick={() => { onRoleSwitch("freelancer"); onNavigate("freelancer"); }}
                 className="px-6 py-3.5 rounded-xl bg-white/8 border border-white/15 text-white font-semibold text-base hover:bg-white/12 transition-colors flex items-center gap-2 justify-center"
               >
-                Join as a Freelancer
+                {t("joinFreelancer", lang)}
                 <ArrowRight size={16} />
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-5 mt-8 text-sm text-slate-500">
-              <span className="flex items-center gap-1.5"><Check size={14} className="text-emerald-400" /> Free to join</span>
-              <span className="flex items-center gap-1.5"><Check size={14} className="text-emerald-400" /> No subscription fees</span>
-              <span className="flex items-center gap-1.5"><Check size={14} className="text-emerald-400" /> XAF & USD payments</span>
+              <span className="flex items-center gap-1.5"><Check size={14} className="text-emerald-400" /> {t("freeToJoin", lang)}</span>
+              <span className="flex items-center gap-1.5"><Check size={14} className="text-emerald-400" /> {t("noSubscription", lang)}</span>
+              <span className="flex items-center gap-1.5"><Check size={14} className="text-emerald-400" /> {t("xafUsdPayments", lang)}</span>
             </div>
           </div>
         </div>
@@ -564,15 +811,43 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
         </div>
       </section>
 
+      {/* ═══ BUILT FOR CAMEROON — Feature Showcase ═══ */}
+      <section className="bg-gradient-to-b from-slate-50 to-white py-20">
+        <div className="max-w-7xl mx-auto px-4 lg:px-8">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold mb-4">
+              🇨🇲 {t("builtForCameroon", lang)}
+            </div>
+            <h2 className="text-3xl lg:text-4xl font-extrabold text-[#0D1117] tracking-tight">{t("builtForCameroon", lang)}</h2>
+            <p className="text-slate-500 mt-3 max-w-lg mx-auto">{t("builtForCameroonDesc", lang)}</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {PLATFORM_FEATURES.map((feat, i) => (
+              <div
+                key={i}
+                className="group relative bg-white rounded-2xl border border-border p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+              >
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" style={{ background: `linear-gradient(135deg, transparent 60%, rgba(2,132,199,0.05) 100%)` }} />
+                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${feat.color} flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
+                  <feat.icon size={20} className="text-white" />
+                </div>
+                <div className="font-bold text-sm text-[#0D1117] mb-1">{feat.title[lang]}</div>
+                <p className="text-xs text-slate-500 leading-relaxed">{feat.desc[lang]}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Browse Categories */}
       <section className="max-w-7xl mx-auto px-4 lg:px-8 py-16">
         <div className="flex items-end justify-between mb-8">
           <div>
-            <h2 className="text-2xl lg:text-3xl font-extrabold text-[#0D1117] tracking-tight">Browse by Category</h2>
-            <p className="text-slate-500 mt-1">Explore opportunities in your field of expertise</p>
+            <h2 className="text-2xl lg:text-3xl font-extrabold text-[#0D1117] tracking-tight">{t("browseByCategory", lang)}</h2>
+            <p className="text-slate-500 mt-1">{t("exploreOpportunities", lang)}</p>
           </div>
           <button onClick={() => { onRoleSwitch("freelancer"); onNavigate("freelancer"); }} className="hidden md:flex items-center gap-1.5 text-[#0284C7] font-semibold text-sm hover:gap-2.5 transition-all">
-            View all categories <ArrowRight size={14} />
+            {t("viewAllCategories", lang)} <ArrowRight size={14} />
           </button>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -596,8 +871,8 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
       <section className="bg-[#0D1117] py-20">
         <div className="max-w-7xl mx-auto px-4 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl lg:text-4xl font-extrabold text-white tracking-tight">How FIT Works</h2>
-            <p className="text-slate-400 mt-3">Go from idea to done — in four simple steps</p>
+            <h2 className="text-3xl lg:text-4xl font-extrabold text-white tracking-tight">{t("howFitWorks", lang)}</h2>
+            <p className="text-slate-400 mt-3">{t("howFitWorksDesc", lang)}</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             {HOW_IT_WORKS.map((step, i) => (
@@ -614,15 +889,77 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
         </div>
       </section>
 
+      {/* ═══ AI-POWERED MATCHING SECTION ═══ */}
+      <section className="py-20 bg-gradient-to-b from-white to-slate-50">
+        <div className="max-w-7xl mx-auto px-4 lg:px-8">
+          <div className="bg-gradient-to-br from-[#0D1117] to-[#1E293B] rounded-3xl p-8 lg:p-12 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-[#0284C7]/10 blur-3xl" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full bg-[#06B6D4]/10 blur-3xl" />
+            <div className="relative">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#DB2777] to-[#F472B6] flex items-center justify-center">
+                  <Sparkles size={22} className="text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight">{t("aiMatching", lang)}</h2>
+                  <p className="text-slate-400 text-sm">{t("aiMatchingDesc", lang)}</p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col lg:flex-row gap-4">
+                <div className="flex-1">
+                  <textarea
+                    value={aiQuery}
+                    onChange={(e) => { setAiQuery(e.target.value); setShowAiResults(false); }}
+                    placeholder={t("describeProject", lang)}
+                    className="w-full bg-white/10 border border-white/15 rounded-xl px-5 py-4 text-white text-sm placeholder:text-slate-500 outline-none focus:border-cyan-400/50 transition-colors resize-none h-24"
+                  />
+                  <button
+                    onClick={handleAiMatch}
+                    className="mt-3 px-6 py-3 rounded-xl bg-gradient-to-r from-[#DB2777] to-[#F472B6] text-white font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-2"
+                  >
+                    <Sparkles size={15} />
+                    {t("findMyMatch", lang)}
+                  </button>
+                </div>
+
+                {showAiResults && (
+                  <div className="flex-1 space-y-3">
+                    {AI_MATCH_RESULTS.map((match, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-white/10 border border-white/10 rounded-xl p-4 flex items-center gap-3 hover:bg-white/15 transition-colors cursor-pointer"
+                        style={{ animation: `fadeIn 0.4s ease-out ${idx * 0.15}s both` }}
+                      >
+                        <Avatar initials={match.initials} gradient={match.gradient} size="md" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-white">{match.name}</span>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">{match.matchScore}% match</span>
+                          </div>
+                          <div className="text-xs text-slate-400">{match.title}</div>
+                          <div className="text-[10px] text-cyan-400/70 mt-1 truncate">{match.reason}</div>
+                        </div>
+                        <ArrowRight size={14} className="text-slate-500 flex-shrink-0" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Featured Talent Teaser */}
       <section className="max-w-7xl mx-auto px-4 lg:px-8 py-16">
         <div className="flex items-end justify-between mb-8">
           <div>
-            <h2 className="text-2xl lg:text-3xl font-extrabold text-[#0D1117] tracking-tight">Top Talent on FIT</h2>
-            <p className="text-slate-500 mt-1">Vetted professionals ready to work</p>
+            <h2 className="text-2xl lg:text-3xl font-extrabold text-[#0D1117] tracking-tight">{t("topTalent", lang)}</h2>
+            <p className="text-slate-500 mt-1">{t("topTalentDesc", lang)}</p>
           </div>
           <button onClick={() => { onRoleSwitch("client"); onNavigate("talent"); }} className="hidden md:flex items-center gap-1.5 text-[#0284C7] font-semibold text-sm">
-            Browse all talent <ArrowRight size={14} />
+            {t("browseAllTalent", lang)} <ArrowRight size={14} />
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -654,17 +991,49 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
         </div>
       </section>
 
+      {/* ═══ INTERNSHIP HUB CTA ═══ */}
+      <section className="bg-gradient-to-r from-[#6366F1] to-[#818CF8] py-16">
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 flex flex-col md:flex-row items-center gap-8">
+          <div className="flex-1">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/20 text-white text-xs font-bold mb-4">
+              <GraduationCap size={13} /> {t("forStudents", lang)}
+            </div>
+            <h2 className="text-3xl lg:text-4xl font-extrabold text-white tracking-tight mb-3">{t("internshipHub", lang)}</h2>
+            <p className="text-indigo-100 text-lg mb-6 max-w-lg">{t("internshipHubDesc", lang)}</p>
+            <button
+              onClick={() => onNavigate("internships")}
+              className="px-7 py-3.5 bg-white text-[#6366F1] font-bold rounded-xl hover:bg-indigo-50 transition-colors flex items-center gap-2"
+            >
+              {t("browseInternships", lang)}
+              <ArrowRight size={16} />
+            </button>
+          </div>
+          <div className="flex-shrink-0 grid grid-cols-2 gap-3">
+            {INTERNSHIPS.slice(0, 4).map((intern) => (
+              <div key={intern.id} className="bg-white/10 border border-white/15 rounded-xl p-3.5 backdrop-blur-sm min-w-[160px]">
+                <div className="text-xs font-bold text-white mb-1 truncate">{intern.title}</div>
+                <div className="text-[10px] text-indigo-200 truncate">{intern.company}</div>
+                <div className="mt-2 flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.5 rounded bg-white/15 text-[9px] font-medium text-white">{intern.duration}</span>
+                  {intern.paid && <span className="px-1.5 py-0.5 rounded bg-emerald-500/30 text-[9px] font-medium text-emerald-300">Paid</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA Banner */}
       <section className="bg-gradient-to-r from-[#0284C7] to-[#06B6D4] py-16">
         <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-3xl lg:text-4xl font-extrabold text-white tracking-tight mb-4">Ready to get started?</h2>
-          <p className="text-blue-100 text-lg mb-8">Join thousands of African freelancers and businesses already growing with FIT.</p>
+          <h2 className="text-3xl lg:text-4xl font-extrabold text-white tracking-tight mb-4">{t("readyToStart", lang)}</h2>
+          <p className="text-blue-100 text-lg mb-8">{t("readyToStartDesc", lang)}</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button onClick={() => { onRoleSwitch("client"); onNavigate("wizard"); }} className="px-7 py-3.5 bg-white text-[#0284C7] font-bold rounded-xl hover:bg-blue-50 transition-colors">
-              Post a Job
+              {lang === "en" ? "Post a Job" : "Publier un Projet"}
             </button>
             <button onClick={() => { onRoleSwitch("freelancer"); onNavigate("freelancer"); }} className="px-7 py-3.5 bg-white/10 border border-white/30 text-white font-bold rounded-xl hover:bg-white/20 transition-colors">
-              Find Work
+              {t("findWork", lang)}
             </button>
           </div>
         </div>
@@ -676,13 +1045,13 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
           <div className="flex flex-col md:flex-row justify-between items-start gap-8">
             <div>
               <FITLogo theme="dark" size="md" />
-              <p className="text-slate-500 text-sm mt-2 max-w-xs">Connecting Talents, Building Dreams — across Cameroon and the African continent.</p>
+              <p className="text-slate-500 text-sm mt-2 max-w-xs">{t("footerTagline", lang)}</p>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-8 text-sm">
               {[
-                { title: "Platform", links: ["Find Work", "Find Talent", "Enterprise", "How It Works"] },
-                { title: "Company", links: ["About FIT", "Blog", "Careers", "Press"] },
-                { title: "Support", links: ["Help Center", "Trust & Safety", "Privacy Policy", "Terms"] },
+                { title: t("platform", lang), links: [t("findWork", lang), t("findTalent", lang), t("internships", lang), lang === "en" ? "How It Works" : "Comment ça marche"] },
+                { title: t("company", lang), links: [lang === "en" ? "About FIT" : "À propos de FIT", "Blog", lang === "en" ? "Careers" : "Carrières", lang === "en" ? "Press" : "Presse"] },
+                { title: t("support", lang), links: [lang === "en" ? "Help Center" : "Centre d'aide", lang === "en" ? "Trust & Safety" : "Confiance & Sécurité", lang === "en" ? "Privacy Policy" : "Confidentialité", lang === "en" ? "Terms" : "Conditions"] },
               ].map((col) => (
                 <div key={col.title}>
                   <div className="font-semibold text-white mb-3">{col.title}</div>
@@ -694,13 +1063,16 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
           <div className="mt-10 pt-6 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4">
             <span className="text-slate-600 text-xs">© 2025 Freelance Interconnect. All rights reserved.</span>
             <div className="flex items-center gap-2 text-xs text-slate-600">
-              <span className="flex items-center gap-1"><Globe size={11} /> English</span>
+              <span className="flex items-center gap-1"><Globe size={11} /> {t("english", lang)}</span>
               <span className="mx-2 text-slate-700">|</span>
               <span>XAF · USD · EUR</span>
             </div>
           </div>
         </div>
       </footer>
+
+      {/* Inline keyframes for AI results animation */}
+      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   );
 }
@@ -1827,6 +2199,11 @@ function MessengerPage() {
   const [newMessage, setNewMessage] = useState("");
   const [messages, setMessages] = useState(CHAT_MESSAGES);
   const [activeFilter, setActiveFilter] = useState<"all" | "contract" | "interview">("all");
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(15);
+  const [selectedTime, setSelectedTime] = useState("10:00 AM");
+  const [selectedDuration, setSelectedDuration] = useState("30 min");
+  const [interviewNote, setInterviewNote] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -1835,6 +2212,17 @@ function MessengerPage() {
     if (!newMessage.trim()) return;
     setMessages([...messages, { id: Date.now(), sender: "me", text: newMessage, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
     setNewMessage("");
+  };
+
+  const handleScheduleInterview = () => {
+    setMessages([...messages, {
+      id: Date.now(),
+      sender: "me",
+      text: `📅 Video Interview Scheduled\n\n📆 July ${selectedDate}, 2025 at ${selectedTime}\n⏱ Duration: ${selectedDuration}\n📹 Platform: FIT Video\n${interviewNote ? `\n📝 Note: ${interviewNote}` : ""}`,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    }]);
+    setShowScheduleModal(false);
+    setInterviewNote("");
   };
 
   const filtered = THREAD_LIST.filter((t) => activeFilter === "all" || t.type === activeFilter);
@@ -1908,6 +2296,12 @@ function MessengerPage() {
             <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors" title="Video Call">
               <Video size={16} className="text-slate-500" />
             </button>
+            <button
+              onClick={() => setShowScheduleModal(true)}
+              className="px-3 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
+            >
+              <CalendarDays size={12} /> Schedule Interview
+            </button>
             <button className="px-3 py-1.5 bg-blue-50 text-[#0284C7] text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors">
               Send Offer
             </button>
@@ -1964,6 +2358,106 @@ function MessengerPage() {
           </div>
         </div>
       </div>
+
+      {/* ═══ SCHEDULE INTERVIEW MODAL ═══ */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowScheduleModal(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#6366F1] to-[#818CF8] flex items-center justify-center">
+                  <CalendarDays size={18} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-[#0D1117]">Schedule Interview</h3>
+                  <p className="text-xs text-slate-500">with {activeThread.contact}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowScheduleModal(false)} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
+                <X size={16} className="text-slate-500" />
+              </button>
+            </div>
+
+            {/* Date Picker (simple calendar grid) */}
+            <div className="mb-5">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Select Date — July 2025</label>
+              <div className="grid grid-cols-7 gap-1 text-center">
+                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+                  <div key={d} className="text-[10px] font-bold text-slate-400 py-1">{d}</div>
+                ))}
+                {Array.from({ length: 2 }, (_, i) => <div key={`empty-${i}`} />)}
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                  <button
+                    key={day}
+                    onClick={() => setSelectedDate(day)}
+                    className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all ${day === selectedDate ? "bg-gradient-to-br from-[#6366F1] to-[#818CF8] text-white shadow-sm" : day < 3 ? "text-slate-300 cursor-not-allowed" : "text-slate-700 hover:bg-slate-100"}`}
+                    disabled={day < 3}
+                  >
+                    {day}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Time Slot */}
+            <div className="mb-4">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Time Slot</label>
+              <div className="flex flex-wrap gap-1.5">
+                {["9:00 AM", "10:00 AM", "11:00 AM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM", "5:00 PM"].map((time) => (
+                  <button
+                    key={time}
+                    onClick={() => setSelectedTime(time)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedTime === time ? "bg-gradient-to-r from-[#6366F1] to-[#818CF8] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  >
+                    {time}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Duration */}
+            <div className="mb-4">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Duration</label>
+              <div className="flex gap-2">
+                {["15 min", "30 min", "45 min", "1 hour"].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setSelectedDuration(d)}
+                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${selectedDuration === d ? "bg-indigo-50 text-indigo-700 border border-indigo-200" : "bg-slate-50 text-slate-600 border border-border hover:bg-slate-100"}`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Note */}
+            <div className="mb-5">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Note for Candidate (optional)</label>
+              <textarea
+                value={interviewNote}
+                onChange={(e) => setInterviewNote(e.target.value)}
+                placeholder="Discuss project scope, technical skills, etc..."
+                className="w-full px-4 py-3 bg-slate-50 border border-border rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors resize-none h-16 placeholder:text-slate-400"
+              />
+            </div>
+
+            {/* Platform indicator */}
+            <div className="flex items-center gap-2 mb-5 px-3 py-2 bg-slate-50 rounded-lg border border-border">
+              <Video size={14} className="text-indigo-600" />
+              <span className="text-xs font-semibold text-slate-600">FIT Video</span>
+              <span className="text-xs text-slate-400 ml-auto">Built-in video conferencing</span>
+            </div>
+
+            <button
+              onClick={handleScheduleInterview}
+              className="w-full py-3.5 bg-gradient-to-r from-[#6366F1] to-[#818CF8] text-white font-semibold rounded-xl hover:opacity-90 transition-opacity text-sm flex items-center justify-center gap-2"
+            >
+              <Send size={14} /> Send Interview Invite
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2499,6 +2993,8 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
     availability: "Available Now",
   });
   const [saved, setSaved] = useState(false);
+  const [githubConnected, setGithubConnected] = useState(false);
+  const [showGithubOnProfile, setShowGithubOnProfile] = useState(true);
 
   const tabs = [
     { key: "profile", label: "Profile", icon: Users },
@@ -2789,7 +3285,6 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
                     {[
                       { label: "Google", icon: "G", connected: true, email: "diane.ngono@gmail.com", color: "bg-red-500" },
                       { label: "LinkedIn", icon: "in", connected: false, email: null, color: "bg-blue-700" },
-                      { label: "GitHub", icon: "gh", connected: false, email: null, color: "bg-[#0D1117]" },
                     ].map((acc) => (
                       <div key={acc.label} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-border">
                         <div className="flex items-center gap-3">
@@ -2804,6 +3299,79 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
                         </button>
                       </div>
                     ))}
+
+                    {/* ═══ ENHANCED GITHUB INTEGRATION ═══ */}
+                    <div className={`rounded-xl border transition-all overflow-hidden ${githubConnected ? "border-emerald-200 bg-slate-50" : "border-border bg-slate-50"}`}>
+                      <div className="flex items-center justify-between p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg bg-[#0D1117] flex items-center justify-center text-white text-xs font-bold flex-shrink-0"><GitBranch size={16} /></div>
+                          <div>
+                            <div className="font-semibold text-sm text-[#0D1117]">GitHub</div>
+                            {githubConnected ? <div className="text-xs text-emerald-600">@diane-ngono · Connected</div> : <div className="text-xs text-slate-400">Not connected</div>}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setGithubConnected(!githubConnected)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${githubConnected ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-[#0D1117] text-white hover:bg-[#1a2332]"}`}
+                        >
+                          {githubConnected ? "Disconnect" : "Connect GitHub"}
+                        </button>
+                      </div>
+
+                      {githubConnected && (
+                        <div className="px-4 pb-4 space-y-3">
+                          {/* Repos */}
+                          <div className="space-y-2">
+                            {[
+                              { name: "fit-dashboard", stars: 48, lang: "TypeScript", langColor: "bg-blue-500", lastCommit: "2 days ago" },
+                              { name: "mobile-money-sdk", stars: 124, lang: "JavaScript", langColor: "bg-yellow-400", lastCommit: "1 week ago" },
+                              { name: "agritrack-api", stars: 32, lang: "Python", langColor: "bg-emerald-500", lastCommit: "3 weeks ago" },
+                            ].map((repo) => (
+                              <div key={repo.name} className="flex items-center justify-between p-3 bg-white rounded-lg border border-border">
+                                <div className="flex items-center gap-2">
+                                  <GitBranch size={13} className="text-slate-400" />
+                                  <span className="text-sm font-semibold text-[#0284C7]">{repo.name}</span>
+                                  <span className="flex items-center gap-1 text-[10px] text-slate-500"><Star size={9} className="text-amber-400" /> {repo.stars}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="flex items-center gap-1 text-[10px] text-slate-500"><span className={`w-2 h-2 rounded-full ${repo.langColor}`} />{repo.lang}</span>
+                                  <span className="text-[10px] text-slate-400">{repo.lastCommit}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Contributions bar */}
+                          <div className="bg-white rounded-lg border border-border p-3">
+                            <div className="text-xs font-semibold text-slate-600 mb-2">Contribution Activity</div>
+                            <div className="flex gap-0.5">
+                              {Array.from({ length: 24 }, (_, i) => (
+                                <div
+                                  key={i}
+                                  className="flex-1 rounded-sm"
+                                  style={{ height: `${Math.max(8, Math.random() * 28)}px`, background: `rgba(2, 132, 199, ${0.15 + Math.random() * 0.7})` }}
+                                />
+                              ))}
+                            </div>
+                            <div className="flex justify-between text-[9px] text-slate-400 mt-1"><span>6 months ago</span><span>Now</span></div>
+                          </div>
+
+                          {/* Show on profile toggle */}
+                          <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-border">
+                            <div>
+                              <div className="text-sm font-semibold text-[#0D1117]">Show on Profile</div>
+                              <div className="text-xs text-slate-500">Display pinned repos in your portfolio</div>
+                            </div>
+                            <button
+                              onClick={() => setShowGithubOnProfile(!showGithubOnProfile)}
+                              className={`w-10 h-5 rounded-full transition-colors relative ${showGithubOnProfile ? "bg-[#0284C7]" : "bg-slate-300"}`}
+                            >
+                              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${showGithubOnProfile ? "left-5" : "left-0.5"}`} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -3736,6 +4304,1603 @@ function BuyConnectsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
   );
 }
 
+// ─── INTERNSHIPS PAGE ────────────────────────────────────────────────────────
+
+function InternshipsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
+  const [lang] = useLang();
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("All");
+
+  const filtered = INTERNSHIPS.filter((intern) => {
+    const matchSearch = search === "" || intern.title.toLowerCase().includes(search.toLowerCase()) || intern.company.toLowerCase().includes(search.toLowerCase()) || intern.skills.some((s) => s.toLowerCase().includes(search.toLowerCase()));
+    const matchType = typeFilter === "All" || intern.type === typeFilter;
+    return matchSearch && matchType;
+  });
+
+  return (
+    <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-2xl font-extrabold text-[#0D1117] tracking-tight">{t("internshipHub", lang)}</h1>
+              <span className="px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-bold flex items-center gap-1">
+                <GraduationCap size={11} /> {t("forStudents", lang)}
+              </span>
+            </div>
+            <p className="text-slate-500 text-sm">{t("internshipHubDesc", lang)}</p>
+          </div>
+        </div>
+
+        {/* Search & Filters */}
+        <div className="bg-white rounded-2xl border border-border p-4 mb-6">
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="flex-1 flex items-center gap-2 px-4 py-2.5 bg-slate-50 rounded-xl border border-border focus-within:border-[#6366F1] transition-colors">
+              <Search size={16} className="text-slate-400 flex-shrink-0" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={lang === "en" ? "Search internships by title, company, or skill..." : "Rechercher par titre, entreprise ou compétence..."}
+                className="flex-1 bg-transparent text-sm outline-none text-slate-700 placeholder:text-slate-400"
+              />
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0">
+              {["All", "Remote", "On-site", "Hybrid"].map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setTypeFilter(f)}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex-shrink-0 ${typeFilter === f ? "bg-gradient-to-r from-[#6366F1] to-[#818CF8] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Results */}
+        <div className="text-sm text-slate-500 mb-4">{filtered.length} {lang === "en" ? "internships found" : "stages trouvés"}</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {filtered.map((intern) => (
+            <div key={intern.id} className="bg-white rounded-2xl border border-border p-6 hover:shadow-lg hover:border-indigo-200 transition-all group">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="font-bold text-base text-[#0D1117] group-hover:text-[#6366F1] transition-colors">{intern.title}</h3>
+                  <div className="flex items-center gap-2 mt-1 text-sm text-slate-500">
+                    <Building2 size={13} className="flex-shrink-0" />
+                    <span className="font-medium">{intern.company}</span>
+                    <span className="text-slate-300">·</span>
+                    <MapPin size={12} className="flex-shrink-0" />
+                    <span>{intern.location}</span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${intern.type === "Remote" ? "bg-blue-50 text-blue-700 border border-blue-200" : intern.type === "Hybrid" ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
+                    {intern.type}
+                  </span>
+                  {intern.paid ? (
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">{intern.stipend}</span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">{lang === "en" ? "Unpaid" : "Non rémunéré"}</span>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-sm text-slate-500 leading-relaxed mb-4">{intern.description}</p>
+
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {intern.skills.map((s) => <SkillTag key={s} label={s} />)}
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-border">
+                <div className="flex items-center gap-3 text-xs text-slate-400">
+                  <span className="flex items-center gap-1"><Clock size={12} /> {intern.duration}</span>
+                </div>
+                <button
+                  onClick={() => { onNavigate("signup"); }}
+                  className="px-4 py-2 bg-gradient-to-r from-[#6366F1] to-[#818CF8] text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                >
+                  {lang === "en" ? "Apply Now" : "Postuler"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SUPER ADMIN DASHBOARD ───────────────────────────────────────────────────
+
+function AdminDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
+  const [lang] = useLang();
+  const [activeTab, setActiveTab] = useState<number>(1);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Stateful Admin Datasets for interactive front-end actions
+  const [users, setUsers] = useState(ADMIN_USERS_LIST);
+  const [projects, setProjects] = useState(ADMIN_PROJECTS_LIST);
+  const [transactions, setTransactions] = useState(ADMIN_TRANSACTIONS_LIST);
+  const [withdrawals, setWithdrawals] = useState(ADMIN_WITHDRAWALS_LIST);
+  const [disputes, setDisputes] = useState(ADMIN_DISPUTES_LIST);
+  const [reviews, setReviews] = useState(ADMIN_REVIEWS_LIST);
+  const [categories, setCategories] = useState(ADMIN_CATEGORIES_LIST);
+  const [skills, setSkills] = useState(ADMIN_SKILLS_LIST);
+  const [notifications, setNotifications] = useState(ADMIN_NOTIFICATIONS_LIST);
+  const [coupons, setCoupons] = useState(ADMIN_COUPONS_LIST);
+  const [countries, setCountries] = useState(ADMIN_COUNTRIES_LIST);
+  const [blogs, setBlogs] = useState(ADMIN_BLOGS_LIST);
+  const [plans, setPlans] = useState(ADMIN_PLANS_LIST);
+
+  // Search & filter states
+  const [userSearch, setUserSearch] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [exportLoading, setExportLoading] = useState<string | null>(null);
+
+  // Form states for creation
+  const [newCatName, setNewCatName] = useState("");
+  const [newSkillName, setNewSkillName] = useState("");
+  const [newSkillCat, setNewSkillCat] = useState("Software Development");
+  const [notifTitle, setNotifTitle] = useState("");
+  const [notifMsg, setNotifMsg] = useState("");
+  const [notifAudience, setNotifAudience] = useState("All Users");
+  const [newCouponCode, setNewCouponCode] = useState("");
+  const [newCouponDiscount, setNewCouponDiscount] = useState("10%");
+  const [newCountryName, setNewCountryName] = useState("");
+  const [newCountryCurr, setNewCountryCurr] = useState("XAF");
+
+  // Chat window state
+  const [adminChatActive, setAdminChatActive] = useState(1);
+  const [adminChatText, setAdminChatText] = useState("");
+  const [adminChats, setAdminChats] = useState([
+    { id: 1, name: "Diane Ngono", messages: [{ sender: "user", text: "Hello, my profile verification is still pending." }, { sender: "admin", text: "Let me check that right away." }] },
+    { id: 2, name: "Afrikart Commerce", messages: [{ sender: "user", text: "We need assistance with withdrawing our escrow fund refund." }] },
+  ]);
+
+  // Settings states
+  const [generalSettings, setGeneralSettings] = useState({ title: "Freelance Interconnect", domain: "fit.africa", email: "admin@fit.africa", supportPhone: "+237 677 000 111" });
+
+  const groups = [
+    {
+      title: "Core System",
+      items: [
+        { id: 1, label: "Dashboard", icon: BarChart2 },
+        { id: 14, label: "System Reports", icon: FileText },
+        { id: 19, label: "System Settings", icon: Settings },
+      ],
+    },
+    {
+      title: "Users & Vetting",
+      items: [
+        { id: 2, label: "User Management", icon: Users },
+        { id: 3, label: "Freelancer Verification", icon: ShieldCheck },
+        { id: 4, label: "Client Records", icon: Building2 },
+        { id: 9, label: "Review Moderator", icon: Star },
+      ],
+    },
+    {
+      title: "Projects & Operations",
+      items: [
+        { id: 5, label: "Project Directory", icon: Briefcase },
+        { id: 8, label: "Dispute Center", icon: AlertCircle },
+      ],
+    },
+    {
+      title: "Financial Engine",
+      items: [
+        { id: 6, label: "Escrow Payments", icon: Wallet },
+        { id: 7, label: "Withdrawal Requests", icon: DollarSign },
+        { id: 15, label: "Subscription Plans", icon: Cpu },
+        { id: 17, label: "Discount Coupons", icon: TagIcon },
+      ],
+    },
+    {
+      title: "Engagement & Content",
+      items: [
+        { id: 12, label: "System Broadcasts", icon: Bell },
+        { id: 13, label: "Support Messages", icon: MessageSquare },
+        { id: 18, label: "Editorial Blog", icon: FileCheck },
+      ],
+    },
+    {
+      title: "Platform Rules",
+      items: [
+        { id: 10, label: "Job Categories", icon: Layers },
+        { id: 11, label: "Skills Library", icon: Code },
+        { id: 16, label: "Supported Countries", icon: Globe },
+        { id: 20, label: "Admin Profile", icon: Lock },
+      ],
+    },
+  ];
+
+  // Helper custom TagIcon since it's not standard
+  function TagIcon(props: any) {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.size || 16} height={props.size || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+        <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
+        <path d="M7 7h.01" />
+      </svg>
+    );
+  }
+
+  // Interactive action handlers
+  const handleToggleUserStatus = (id: number) => {
+    setUsers(users.map(u => u.id === id ? { ...u, status: u.status === "active" ? "suspended" : "active" } : u));
+  };
+
+  const handleVerifyUser = (id: number) => {
+    setUsers(users.map(u => u.id === id ? { ...u, verified: "verified" } : u));
+  };
+
+  const handleApproveWithdrawal = (id: number) => {
+    setWithdrawals(withdrawals.map(w => w.id === id ? { ...w, status: "Approved" } : w));
+  };
+
+  const handleRejectWithdrawal = (id: number) => {
+    setWithdrawals(withdrawals.map(w => w.id === id ? { ...w, status: "Rejected" } : w));
+  };
+
+  const handleResolveDispute = (id: string) => {
+    setDisputes(disputes.map(d => d.id === id ? { ...d, status: "Resolved" } : d));
+  };
+
+  const handleToggleReviewVisibility = (id: number) => {
+    setReviews(reviews.map(r => r.id === id ? { ...r, hidden: !r.hidden } : r));
+  };
+
+  const handleAddCategory = () => {
+    if (!newCatName.trim()) return;
+    setCategories([...categories, { id: Date.now(), name: newCatName, icon: "Layers", count: 0 }]);
+    setNewCatName("");
+  };
+
+  const handleAddSkill = () => {
+    if (!newSkillName.trim()) return;
+    setSkills([...skills, { id: Date.now(), skill: newSkillName, category: newSkillCat, count: 0 }]);
+    setNewSkillName("");
+  };
+
+  const handleSendNotification = () => {
+    if (!notifTitle.trim() || !notifMsg.trim()) return;
+    setNotifications([{ id: Date.now(), title: notifTitle, message: notifMsg, audience: notifAudience, date: "Just Now" }, ...notifications]);
+    setNotifTitle("");
+    setNotifMsg("");
+  };
+
+  const handleAddCoupon = () => {
+    if (!newCouponCode.trim()) return;
+    setCoupons([...coupons, { id: Date.now(), code: newCouponCode.toUpperCase(), discount: newCouponDiscount, expiryDate: "Dec 31, 2026", status: "Active" }]);
+    setNewCouponCode("");
+  };
+
+  const handleAddCountry = () => {
+    if (!newCountryName.trim()) return;
+    setCountries([...countries, { id: Date.now(), country: newCountryName, currency: newCountryCurr, status: "Active" }]);
+    setNewCountryName("");
+  };
+
+  const handleSendAdminChatMessage = () => {
+    if (!adminChatText.trim()) return;
+    setAdminChats(adminChats.map(c => c.id === adminChatActive ? { ...c, messages: [...(c.messages || []), { sender: "admin", text: adminChatText }] } : c));
+    setAdminChatText("");
+  };
+
+  const simulateExport = (type: string) => {
+    setExportLoading(type);
+    setTimeout(() => {
+      setExportLoading(null);
+      alert(`Report exported successfully as ${type}!`);
+    }, 1500);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {/* Sidebar Navigation */}
+      <aside className={`${sidebarOpen ? "w-64" : "w-20"} bg-[#0D1117] text-slate-300 flex-shrink-0 transition-all duration-300 flex flex-col border-r border-slate-800`}>
+        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <FITLogo theme="dark" size="sm" />
+            {sidebarOpen && <span className="font-extrabold text-xs text-cyan-400 border border-cyan-400/40 rounded px-1 flex-shrink-0">ADMIN</span>}
+          </div>
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1 hover:bg-slate-800 rounded text-slate-400">
+            <Menu size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-4 px-2 space-y-4">
+          {groups.map((group, idx) => (
+            <div key={idx} className="space-y-1">
+              {sidebarOpen && <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 mb-1">{group.title}</div>}
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all text-left ${activeTab === item.id ? "bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white shadow-md shadow-[#0284C7]/10" : "hover:bg-slate-800/50 hover:text-white"}`}
+                >
+                  <item.icon size={15} className="flex-shrink-0" />
+                  {sidebarOpen && <span className="truncate">{item.label}</span>}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        <div className="p-3 border-t border-slate-800">
+          <button
+            onClick={() => onNavigate("landing")}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-400 hover:bg-red-950/20 transition-all"
+          >
+            <LogOut size={14} />
+            {sidebarOpen && <span>Exit Dashboard</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Admin Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Header */}
+        <header className="h-16 bg-white border-b border-border flex items-center justify-between px-6 z-10 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <h2 className="font-extrabold text-[#0D1117] text-base leading-tight">Super Admin Panel</h2>
+            <div className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded bg-slate-100 border border-border text-[10px] font-bold text-slate-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              SYSTEM OK · DOUALA-SECURE
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 bg-slate-50 border border-border rounded-lg p-1.5">
+              <Avatar initials="AD" gradient="from-slate-700 to-slate-900" size="sm" />
+              <div className="text-left hidden md:block px-1">
+                <div className="text-xs font-bold text-[#0D1117]">System Administrator</div>
+                <div className="text-[10px] text-slate-400">Level 4 access</div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Dynamic View Panel */}
+        <main className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* TAB 1: DASHBOARD OVERVIEW */}
+          {activeTab === 1 && (
+            <div className="space-y-6 animate-fadeIn">
+              {/* Stats Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                {[
+                  { label: "Total Users", value: "1,842", sub: "+12% this week", color: "text-[#0284C7]", icon: Users },
+                  { label: "Active Projects", value: "320", sub: "28 in escrow", color: "text-indigo-600", icon: Briefcase },
+                  { label: "Total Revenue", value: "XAF 8.4M", sub: "USD 14.2K converted", color: "text-emerald-600", icon: DollarSign },
+                  { label: "Pending Withdrawals", value: "3 requests", sub: "Action required", color: "text-amber-600", icon: Wallet },
+                  { label: "Open Disputes", value: "1 case", sub: "Review arguments", color: "text-red-600", icon: AlertCircle },
+                ].map((stat, idx) => (
+                  <div key={idx} className="bg-white rounded-2xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{stat.label}</span>
+                      <div className="w-7 h-7 rounded-lg bg-slate-50 border border-border flex items-center justify-center">
+                        <stat.icon size={13} className="text-slate-500" />
+                      </div>
+                    </div>
+                    <div className={`text-xl font-extrabold ${stat.color}`} style={{ fontFamily: "'JetBrains Mono', monospace" }}>{stat.value}</div>
+                    <div className="text-[10px] text-slate-500 mt-1 font-medium">{stat.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Premium Charts & Distribution */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Chart Column */}
+                <div className="bg-white rounded-2xl border border-border p-5 lg:col-span-2 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-sm text-[#0D1117]">Revenue Performance</h3>
+                      <p className="text-[10px] text-slate-400">Total volume processed through escrows (Millions XAF)</p>
+                    </div>
+                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">+18.4% MoM</span>
+                  </div>
+                  {/* Clean SVG Area Chart */}
+                  <div className="h-48 w-full bg-slate-50 border border-border rounded-xl p-3 flex flex-col justify-between relative overflow-hidden">
+                    <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+                      <defs>
+                        <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#0284C7" stopOpacity="0.25" />
+                          <stop offset="100%" stopColor="#0284C7" stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 90 Q 20 60 40 75 T 80 40 T 100 30 L 100 100 L 0 100 Z" fill="url(#chartGradient)" />
+                      <path d="M 0 90 Q 20 60 40 75 T 80 40 T 100 30" fill="none" stroke="#0284C7" strokeWidth="2.5" strokeLinecap="round" />
+                    </svg>
+                    <div className="flex justify-between items-start z-10">
+                      <span className="text-[9px] font-bold text-slate-400">8.0M</span>
+                      <span className="text-[9px] font-bold text-slate-400">4.5M</span>
+                      <span className="text-[9px] font-bold text-slate-400">2.0M</span>
+                    </div>
+                    <div className="flex justify-between items-end z-10 text-[9px] font-bold text-slate-400">
+                      <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Categories Breakdown */}
+                <div className="bg-white rounded-2xl border border-border p-5 flex flex-col justify-between">
+                  <div>
+                    <h3 className="font-bold text-sm text-[#0D1117] mb-1">Earnings by Category</h3>
+                    <p className="text-[10px] text-slate-400 mb-4">Volume allocation per expertise category</p>
+                  </div>
+                  <div className="space-y-3.5">
+                    {[
+                      { label: "Software Dev", pct: 65, color: "bg-[#0284C7]" },
+                      { label: "Design", pct: 20, color: "bg-[#06B6D4]" },
+                      { label: "Writing & Translation", pct: 10, color: "bg-emerald-500" },
+                      { label: "Marketing", pct: 5, color: "bg-amber-500" },
+                    ].map((item, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <div className="flex justify-between text-xs font-semibold text-slate-600">
+                          <span>{item.label}</span><span>{item.pct}%</span>
+                        </div>
+                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${item.color}`} style={{ width: `${item.pct}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: USER MANAGEMENT */}
+          {activeTab === 2 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-4 animate-fadeIn">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-4">
+                <div>
+                  <h3 className="font-bold text-base text-[#0D1117]">User Directory</h3>
+                  <p className="text-xs text-slate-500">Filter, edit and moderate registered user profiles</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl border border-border">
+                    <Search size={14} className="text-slate-400" />
+                    <input
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      placeholder="Search users..."
+                      className="bg-transparent text-xs outline-none placeholder:text-slate-400 text-slate-700 w-40"
+                    />
+                  </div>
+                  <select
+                    value={userRoleFilter}
+                    onChange={(e) => setUserRoleFilter(e.target.value)}
+                    className="px-3 py-2 bg-slate-50 border border-border rounded-xl text-xs font-semibold text-slate-600 outline-none"
+                  >
+                    <option value="all">All Roles</option>
+                    <option value="freelancer">Freelancers Only</option>
+                    <option value="client">Clients Only</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3">User</th>
+                      <th className="pb-3">Contact</th>
+                      <th className="pb-3">Location</th>
+                      <th className="pb-3">Role</th>
+                      <th className="pb-3">Vetting</th>
+                      <th className="pb-3">Status</th>
+                      <th className="pb-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users
+                      .filter((u) => {
+                        const matchesSearch = u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase());
+                        const matchesRole = userRoleFilter === "all" || u.role === userRoleFilter;
+                        return matchesSearch && matchesRole;
+                      })
+                      .map((user) => (
+                        <tr key={user.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/40 text-xs text-slate-600 transition-colors">
+                          <td className="py-3 flex items-center gap-2.5">
+                            <Avatar initials={user.photo} gradient="from-blue-500 to-indigo-600" size="xs" />
+                            <div>
+                              <div className="font-bold text-[#0D1117]">{user.name}</div>
+                              <div className="text-[10px] text-slate-400">Joined {user.dateJoined}</div>
+                            </div>
+                          </td>
+                          <td className="py-3">
+                            <div>{user.email}</div>
+                            <div className="text-[10px] text-slate-400">{user.phone}</div>
+                          </td>
+                          <td className="py-3 font-medium">{user.country}</td>
+                          <td className="py-3 capitalize">
+                            <Badge variant={user.role === "client" ? "blue" : "cyan"}>{user.role}</Badge>
+                          </td>
+                          <td className="py-3">
+                            <Badge variant={user.verified === "verified" ? "success" : user.verified === "pending" ? "warning" : "default"}>
+                              {user.verified}
+                            </Badge>
+                          </td>
+                          <td className="py-3">
+                            <span className={`inline-flex w-2 h-2 rounded-full mr-1.5 ${user.status === "active" ? "bg-emerald-500" : "bg-red-500"}`} />
+                            <span className="capitalize">{user.status}</span>
+                          </td>
+                          <td className="py-3 text-right space-x-1.5">
+                            <button
+                              onClick={() => setSelectedUser(user)}
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-[#0D1117] rounded-lg font-bold transition-colors"
+                            >
+                              View
+                            </button>
+                            <button
+                              onClick={() => handleToggleUserStatus(user.id)}
+                              className={`px-2.5 py-1.5 rounded-lg font-bold transition-all ${user.status === "active" ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"}`}
+                            >
+                              {user.status === "active" ? "Suspend" : "Activate"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: FREELANCER VERIFICATION */}
+          {activeTab === 3 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-4 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Freelancer Verification Desk</h3>
+                <p className="text-xs text-slate-500">Review and verify professional portfolios and identification badges</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {users
+                  .filter((u) => u.role === "freelancer")
+                  .map((free) => (
+                    <div key={free.id} className="p-4 bg-slate-50 rounded-xl border border-border flex flex-col justify-between">
+                      <div className="flex items-start justify-between">
+                        <div className="flex gap-2.5">
+                          <Avatar initials={free.photo} gradient="from-blue-600 to-indigo-600" size="sm" />
+                          <div>
+                            <div className="font-bold text-sm text-[#0D1117]">{free.name}</div>
+                            <div className="text-[10px] text-slate-400">Vetting status: <span className="font-semibold text-slate-600">{free.verified}</span></div>
+                          </div>
+                        </div>
+                        <Badge variant={free.verified === "verified" ? "success" : "warning"}>{free.verified}</Badge>
+                      </div>
+
+                      <div className="mt-4 flex gap-2 justify-end">
+                        {free.verified !== "verified" && (
+                          <button
+                            onClick={() => handleVerifyUser(free.id)}
+                            className="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity"
+                          >
+                            Approve Verification
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleToggleUserStatus(free.id)}
+                          className="px-3 py-1.5 bg-white border border-border rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                        >
+                          Suspend Account
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: CLIENT RECORDS */}
+          {activeTab === 4 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-4 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Enterprise Clients</h3>
+                <p className="text-xs text-slate-500">Overview of client platforms, budgets and activity logs</p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3">Client Company</th>
+                      <th className="pb-3">Contact Email</th>
+                      <th className="pb-3">Jobs Posted</th>
+                      <th className="pb-3">Status</th>
+                      <th className="pb-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users
+                      .filter((u) => u.role === "client")
+                      .map((client) => (
+                        <tr key={client.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/40 text-xs text-slate-600">
+                          <td className="py-3 flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-[#0D1117] border border-border">
+                              {client.photo}
+                            </div>
+                            <span className="font-bold text-[#0D1117]">{client.name}</span>
+                          </td>
+                          <td className="py-3">{client.email}</td>
+                          <td className="py-3 font-semibold">12 active projects</td>
+                          <td className="py-3">
+                            <Badge variant={client.status === "active" ? "success" : "danger"}>{client.status}</Badge>
+                          </td>
+                          <td className="py-3 text-right">
+                            <button
+                              onClick={() => handleToggleUserStatus(client.id)}
+                              className="px-2.5 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+                            >
+                              Suspend
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: PROJECT DIRECTORY */}
+          {activeTab === 5 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-4 animate-fadeIn">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-4">
+                <div>
+                  <h3 className="font-bold text-base text-[#0D1117]">Project Directory</h3>
+                  <p className="text-xs text-slate-500">Track milestones and project status allocations</p>
+                </div>
+                <div className="flex gap-1.5 bg-slate-50 border border-border rounded-xl p-1">
+                  {["all", "In Progress", "Completed", "Cancelled"].map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setProjectFilter(f)}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold capitalize transition-all ${projectFilter === f ? "bg-white text-[#0D1117] shadow-sm border border-border" : "text-slate-500 hover:text-slate-900"}`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3">Project Title</th>
+                      <th className="pb-3">Client</th>
+                      <th className="pb-3">Freelancer</th>
+                      <th className="pb-3">Budget</th>
+                      <th className="pb-3">Deadline</th>
+                      <th className="pb-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projects
+                      .filter((p) => projectFilter === "all" || p.status === projectFilter)
+                      .map((proj) => (
+                        <tr key={proj.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/40 text-xs text-slate-600">
+                          <td className="py-3 font-bold text-[#0D1117]">{proj.name}</td>
+                          <td className="py-3">{proj.client}</td>
+                          <td className="py-3">{proj.freelancer}</td>
+                          <td className="py-3 font-semibold text-slate-700">{proj.budget}</td>
+                          <td className="py-3">{proj.deadline}</td>
+                          <td className="py-3">
+                            <Badge variant={proj.status === "Completed" ? "success" : proj.status === "In Progress" ? "blue" : proj.status === "Cancelled" ? "danger" : "default"}>
+                              {proj.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: ESCROW PAYMENTS */}
+          {activeTab === 6 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-4 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Escrow Payments Logs</h3>
+                <p className="text-xs text-slate-500">Monitor transaction pipelines, refunds and currency payouts</p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3">Transaction ID</th>
+                      <th className="pb-3">Parties</th>
+                      <th className="pb-3">Amount</th>
+                      <th className="pb-3">Payment Method</th>
+                      <th className="pb-3">Escrow Status</th>
+                      <th className="pb-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.map((txn) => (
+                      <tr key={txn.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/40 text-xs text-slate-600">
+                        <td className="py-3 font-bold text-[#0D1117]">{txn.id}</td>
+                        <td className="py-3">
+                          <div className="font-medium text-[#0D1117]">{txn.client} (Client)</div>
+                          <div className="text-[10px] text-slate-400">to {txn.freelancer} (Freelancer)</div>
+                        </td>
+                        <td className="py-3 font-semibold text-[#0D1117]">{txn.amount}</td>
+                        <td className="py-3">{txn.method}</td>
+                        <td className="py-3">
+                          <Badge variant={txn.status === "Released" ? "success" : txn.status === "Escrow Funded" ? "blue" : "danger"}>
+                            {txn.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3 text-right">
+                          {txn.status === "Escrow Funded" && (
+                            <button
+                              onClick={() => {
+                                setTransactions(transactions.map(t => t.id === txn.id ? { ...t, status: "Released" } : t));
+                              }}
+                              className="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-colors"
+                            >
+                              Release Fund
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: WITHDRAWAL REQUESTS */}
+          {activeTab === 7 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-4 animate-fadeIn">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-border pb-4">
+                {[
+                  { label: "Pending Payouts", count: withdrawals.filter(w => w.status === "Pending").length, color: "text-amber-600" },
+                  { label: "Approved Payouts", count: withdrawals.filter(w => w.status === "Approved").length, color: "text-emerald-600" },
+                  { label: "Rejected Payouts", count: withdrawals.filter(w => w.status === "Rejected").length, color: "text-slate-500" },
+                ].map((c, i) => (
+                  <div key={i} className="bg-slate-50 p-3.5 rounded-xl border border-border text-center">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{c.label}</div>
+                    <div className={`text-2xl font-extrabold ${c.color} mt-1`}>{c.count}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3">Freelancer</th>
+                      <th className="pb-3">Amount</th>
+                      <th className="pb-3">Payment Method</th>
+                      <th className="pb-3">Request Date</th>
+                      <th className="pb-3">Status</th>
+                      <th className="pb-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {withdrawals.map((withdraw) => (
+                      <tr key={withdraw.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/40 text-xs text-slate-600">
+                        <td className="py-3 font-bold text-[#0D1117]">{withdraw.freelancer}</td>
+                        <td className="py-3 font-semibold text-slate-700">{withdraw.amount}</td>
+                        <td className="py-3">{withdraw.method}</td>
+                        <td className="py-3 text-slate-400">{withdraw.date}</td>
+                        <td className="py-3">
+                          <Badge variant={withdraw.status === "Approved" ? "success" : withdraw.status === "Pending" ? "warning" : "danger"}>
+                            {withdraw.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3 text-right space-x-1.5">
+                          {withdraw.status === "Pending" && (
+                            <>
+                              <button
+                                onClick={() => handleApproveWithdrawal(withdraw.id)}
+                                className="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-colors"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => handleRejectWithdrawal(withdraw.id)}
+                                className="px-2.5 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 8: DISPUTE CENTER */}
+          {activeTab === 8 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-4 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Escrow Dispute Center</h3>
+                <p className="text-xs text-slate-500">Coordinate and resolve milestone disagreements between clients and freelancers</p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {disputes.map((disp) => (
+                  <div key={disp.id} className="p-4 bg-slate-50 rounded-xl border border-border flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="font-extrabold text-sm text-[#0D1117]">{disp.id}</span>
+                        <Badge variant={disp.status === "Resolved" ? "success" : disp.status === "Open" ? "danger" : "warning"}>
+                          {disp.status}
+                        </Badge>
+                      </div>
+                      <p className="text-xs font-semibold text-slate-700">Project: {disp.project}</p>
+                      <div className="text-[10px] text-slate-400 mt-1 flex gap-2">
+                        <span>Client: {disp.client}</span>
+                        <span>·</span>
+                        <span>Freelancer: {disp.freelancer}</span>
+                        <span>·</span>
+                        <span>Opened: {disp.date}</span>
+                      </div>
+                    </div>
+                    {disp.status !== "Resolved" && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleResolveDispute(disp.id)}
+                          className="px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl text-xs font-bold hover:opacity-90 transition-opacity"
+                        >
+                          Mark as Resolved
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDisputes(disputes.map(d => d.id === disp.id ? { ...d, status: "Closed" } : d));
+                          }}
+                          className="px-3 py-2 bg-white border border-border rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                        >
+                          Close Case
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 9: REVIEW MODERATOR */}
+          {activeTab === 9 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-4 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Review Moderator Desk</h3>
+                <p className="text-xs text-slate-500">Monitor and manage platform reviews to prevent spam and platform misconduct</p>
+              </div>
+
+              <div className="space-y-4">
+                {reviews.map((rev) => (
+                  <div key={rev.id} className="p-4 bg-slate-50 rounded-xl border border-border relative">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-[#0D1117]">{rev.reviewer}</span>
+                        <span className="text-[10px] text-slate-400">reviewed</span>
+                        <span className="font-bold text-xs text-[#0D1117]">{rev.user}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400">{rev.date}</span>
+                    </div>
+                    <div className="flex items-center gap-1 mb-2">
+                      {Array.from({ length: 5 }).map((_, idx) => (
+                        <Star key={idx} size={12} className={idx < rev.rating ? "text-amber-400 fill-amber-400" : "text-slate-300"} />
+                      ))}
+                    </div>
+                    <p className={`text-xs ${rev.hidden ? "text-slate-400 italic line-through" : "text-slate-600"}`}>
+                      {rev.hidden ? "[Hidden by Admin] " : ""}{rev.comment}
+                    </p>
+                    <div className="mt-3 flex justify-end gap-2">
+                      <button
+                        onClick={() => handleToggleReviewVisibility(rev.id)}
+                        className="px-2.5 py-1.5 bg-white border border-border rounded-lg text-[10px] font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                      >
+                        {rev.hidden ? "Unhide Review" : "Hide Review"}
+                      </button>
+                      <button
+                        onClick={() => setReviews(reviews.filter(r => r.id !== rev.id))}
+                        className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[10px] font-bold transition-colors"
+                      >
+                        Delete Permanent
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 10: JOB CATEGORIES */}
+          {activeTab === 10 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-5 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Platform Job Categories</h3>
+                <p className="text-xs text-slate-500">Manage categories, icons and job assignments</p>
+              </div>
+
+              {/* Add category form */}
+              <div className="flex gap-2 p-4 bg-slate-50 rounded-xl border border-border">
+                <input
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder="New category name..."
+                  className="bg-white px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700 flex-1"
+                />
+                <button
+                  onClick={handleAddCategory}
+                  className="px-4 py-2 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-xl text-xs font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Create Category
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {categories.map((cat) => (
+                  <div key={cat.id} className="p-4 border border-border bg-white rounded-2xl relative group">
+                    <div className="font-bold text-sm text-[#0D1117]">{cat.name}</div>
+                    <div className="text-[10px] text-slate-400 mt-1">{cat.count} jobs posted</div>
+                    <button
+                      onClick={() => setCategories(categories.filter(c => c.id !== cat.id))}
+                      className="absolute top-2 right-2 p-1 hover:bg-red-50 text-red-500 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <LogOut size={11} className="rotate-45" /> {/* simple cross representation */}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 11: SKILLS LIBRARY */}
+          {activeTab === 11 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-5 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Skills Dictionary</h3>
+                <p className="text-xs text-slate-500">Define search tags and assign them to categories</p>
+              </div>
+
+              {/* Add form */}
+              <div className="flex flex-col md:flex-row gap-2 p-4 bg-slate-50 rounded-xl border border-border">
+                <input
+                  value={newSkillName}
+                  onChange={(e) => setNewSkillName(e.target.value)}
+                  placeholder="New skill tag (e.g. Next.js)..."
+                  className="bg-white px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700 flex-1"
+                />
+                <select
+                  value={newSkillCat}
+                  onChange={(e) => setNewSkillCat(e.target.value)}
+                  className="bg-white px-3 py-2 border border-border rounded-xl text-xs text-slate-600 outline-none"
+                >
+                  {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+                <button
+                  onClick={handleAddSkill}
+                  className="px-4 py-2 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-xl text-xs font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Add Tag
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3">Skill Tag</th>
+                      <th className="pb-3">Category Association</th>
+                      <th className="pb-3">Freelancers List Count</th>
+                      <th className="pb-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {skills.map((tag) => (
+                      <tr key={tag.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/40 text-xs text-slate-600">
+                        <td className="py-3 font-semibold text-[#0D1117]">{tag.skill}</td>
+                        <td className="py-3 text-slate-500">{tag.category}</td>
+                        <td className="py-3 font-bold">{tag.count || 24}</td>
+                        <td className="py-3 text-right">
+                          <button
+                            onClick={() => setSkills(skills.filter(s => s.id !== tag.id))}
+                            className="px-2 py-1 bg-red-50 text-red-500 rounded text-[10px] font-bold hover:bg-red-100"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 12: SYSTEM BROADCASTS */}
+          {activeTab === 12 && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn">
+              <div className="bg-white rounded-2xl border border-border p-6 lg:col-span-2 space-y-4">
+                <div>
+                  <h3 className="font-bold text-base text-[#0D1117]">Create System Broadcast</h3>
+                  <p className="text-xs text-slate-500">Send platform-wide notifications and announcements to user panels</p>
+                </div>
+
+                <div className="space-y-3.5">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Notification Title</label>
+                    <input
+                      value={notifTitle}
+                      onChange={(e) => setNotifTitle(e.target.value)}
+                      placeholder="Maintenance Announcement, Payment policy update..."
+                      className="w-full px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Target Audience</label>
+                    <select
+                      value={notifAudience}
+                      onChange={(e) => setNotifAudience(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-xl text-xs text-slate-600 outline-none"
+                    >
+                      <option>All Users</option>
+                      <option>Freelancers Only</option>
+                      <option>Clients Only</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Broadcast Message</label>
+                    <textarea
+                      value={notifMsg}
+                      onChange={(e) => setNotifMsg(e.target.value)}
+                      placeholder="Write announcement body here..."
+                      className="w-full px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700 h-24 resize-none"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSendNotification}
+                    className="px-4 py-2.5 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-xl text-xs font-bold hover:opacity-90 transition-opacity"
+                  >
+                    Broadcast Now
+                  </button>
+                </div>
+              </div>
+
+              {/* History */}
+              <div className="bg-white rounded-2xl border border-border p-6 space-y-4">
+                <h3 className="font-bold text-sm text-[#0D1117]">Broadcast Logs</h3>
+                <div className="space-y-3.5 overflow-y-auto max-h-80">
+                  {notifications.map((n) => (
+                    <div key={n.id} className="p-3 bg-slate-50 rounded-xl border border-border text-xs relative">
+                      <div className="font-bold text-[#0D1117] mb-1">{n.title}</div>
+                      <p className="text-slate-500 leading-relaxed mb-2">{n.message}</p>
+                      <div className="flex justify-between text-[10px] text-slate-400">
+                        <span>For {n.audience}</span>
+                        <span>{n.date}</span>
+                      </div>
+                      <button
+                        onClick={() => setNotifications(notifications.filter(item => item.id !== n.id))}
+                        className="absolute top-2 right-2 text-slate-400 hover:text-red-500 font-bold"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 13: SUPPORT MESSAGES */}
+          {activeTab === 13 && (
+            <div className="bg-white rounded-2xl border border-border h-[500px] overflow-hidden flex animate-fadeIn">
+              {/* Chat Sidebar */}
+              <div className="w-1/3 border-r border-border bg-slate-50 flex flex-col">
+                <div className="p-4 border-b border-border font-bold text-xs text-[#0D1117] uppercase tracking-wider">Active Inquiries</div>
+                <div className="flex-1 overflow-y-auto">
+                  {adminChats.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setAdminChatActive(c.id)}
+                      className={`w-full text-left p-3.5 border-b border-border text-xs transition-colors flex items-center justify-between ${adminChatActive === c.id ? "bg-white border-l-2 border-l-[#0284C7]" : "hover:bg-slate-100"}`}
+                    >
+                      <span className="font-bold text-[#0D1117]">{c.name}</span>
+                      <span className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Chat panel */}
+              <div className="flex-1 flex flex-col bg-white">
+                <div className="p-4 border-b border-border font-bold text-xs text-[#0D1117]">
+                  Conversation with {adminChats.find(c => c.id === adminChatActive)?.name}
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {adminChats.find(c => c.id === adminChatActive)?.messages?.map((m, idx) => (
+                    <div key={idx} className={`flex ${m.sender === "admin" ? "justify-end" : "justify-start"}`}>
+                      <div className={`p-3 rounded-2xl max-w-sm text-xs ${m.sender === "admin" ? "bg-slate-800 text-white rounded-tr-sm" : "bg-slate-100 text-[#0D1117] rounded-tl-sm"}`}>
+                        {m.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-3 border-t border-border flex gap-2">
+                  <input
+                    value={adminChatText}
+                    onChange={(e) => setAdminChatText(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSendAdminChatMessage()}
+                    placeholder="Type reply message..."
+                    className="flex-1 px-3 py-2 bg-slate-50 border border-border rounded-xl text-xs outline-none text-[#0D1117]"
+                  />
+                  <button
+                    onClick={handleSendAdminChatMessage}
+                    className="px-3.5 py-2 bg-[#0D1117] hover:opacity-90 text-white rounded-xl text-xs font-semibold"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 14: SYSTEM REPORTS */}
+          {activeTab === 14 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-6 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Platform Reports & Data Export</h3>
+                <p className="text-xs text-slate-500">Download formatted databases for taxation audits and operations</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {[
+                  { title: "Financial Revenue Statement", desc: "PDF export containing escrow payouts and commission cuts", format: "PDF", color: "from-rose-500 to-red-600" },
+                  { title: "Active Freelancer Database", desc: "Excel file spreadsheet listing user profiles and skills tags", format: "Excel", color: "from-emerald-500 to-teal-600" },
+                  { title: "Project Escrow Audits", desc: "CSV database documenting transaction IDs and released payouts", format: "CSV", color: "from-blue-500 to-indigo-600" },
+                ].map((rep, idx) => (
+                  <div key={idx} className="p-5 border border-border bg-slate-50 rounded-2xl flex flex-col justify-between h-48">
+                    <div>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold text-white bg-gradient-to-r ${rep.color}`}>{rep.format}</span>
+                      <h4 className="font-bold text-sm text-[#0D1117] mt-2">{rep.title}</h4>
+                      <p className="text-xs text-slate-400 mt-1">{rep.desc}</p>
+                    </div>
+                    <button
+                      onClick={() => simulateExport(rep.format)}
+                      disabled={exportLoading !== null}
+                      className="w-full py-2 bg-[#0D1117] hover:opacity-90 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5"
+                    >
+                      {exportLoading === rep.format ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" /> Exporting...
+                        </>
+                      ) : (
+                        `Download ${rep.format}`
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 15: SUBSCRIPTION PLANS */}
+          {activeTab === 15 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-5 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Subscription Packages</h3>
+                <p className="text-xs text-slate-500">Configure pricing structures and subscriber limits</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {plans.map((p) => (
+                  <div key={p.id} className="p-5 border border-border rounded-2xl bg-slate-50/50 space-y-4">
+                    <div>
+                      <h4 className="font-bold text-sm text-[#0D1117]">{p.name}</h4>
+                      <div className="text-lg font-extrabold text-[#0284C7] mt-1" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{p.price}</div>
+                      <div className="text-[10px] text-slate-400">billed per {p.billing}</div>
+                    </div>
+                    <div className="pt-2 border-t border-border flex justify-between items-center text-xs font-semibold text-slate-500">
+                      <span>Subscribers</span>
+                      <span className="text-[#0D1117]">{p.subscribers} users</span>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => {
+                          const newPrice = prompt(`Enter new price for ${p.name}:`, p.price);
+                          if (newPrice !== null) {
+                            setPlans(plans.map(item => item.id === p.id ? { ...item, price: newPrice } : item));
+                          }
+                        }}
+                        className="w-full py-1.5 bg-white border border-border hover:bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600"
+                      >
+                        Edit Price
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 16: SUPPORTED COUNTRIES */}
+          {activeTab === 16 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-5 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Supported Trade Countries</h3>
+                <p className="text-xs text-slate-500">Configure currency exchanges and regional operations</p>
+              </div>
+
+              {/* Add form */}
+              <div className="flex flex-col md:flex-row gap-2 p-4 bg-slate-50 rounded-xl border border-border">
+                <input
+                  value={newCountryName}
+                  onChange={(e) => setNewCountryName(e.target.value)}
+                  placeholder="New Country Name (e.g. Senegal)..."
+                  className="bg-white px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700 flex-1"
+                />
+                <input
+                  value={newCountryCurr}
+                  onChange={(e) => setNewCountryCurr(e.target.value)}
+                  placeholder="Currency Code (e.g. XOF)..."
+                  className="bg-white px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700 w-32"
+                />
+                <button
+                  onClick={handleAddCountry}
+                  className="px-4 py-2 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-xl text-xs font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Add Country
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3">Country</th>
+                      <th className="pb-3">Local Currency</th>
+                      <th className="pb-3">Status</th>
+                      <th className="pb-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {countries.map((c) => (
+                      <tr key={c.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/40 text-xs text-slate-600">
+                        <td className="py-3 font-semibold text-[#0D1117]">{c.country}</td>
+                        <td className="py-3 text-slate-500">{c.currency}</td>
+                        <td className="py-3">
+                          <Badge variant={c.status === "Active" ? "success" : "danger"}>{c.status}</Badge>
+                        </td>
+                        <td className="py-3 text-right">
+                          <button
+                            onClick={() => {
+                              setCountries(countries.map(item => item.id === c.id ? { ...item, status: item.status === "Active" ? "Inactive" : "Active" } : item));
+                            }}
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[10px] font-bold"
+                          >
+                            Toggle Status
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 17: DISCOUNT COUPONS */}
+          {activeTab === 17 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-5 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Promotion Coupons</h3>
+                <p className="text-xs text-slate-500">Provide Connects discount structures and campaigns</p>
+              </div>
+
+              {/* Add form */}
+              <div className="flex flex-col md:flex-row gap-2 p-4 bg-slate-50 rounded-xl border border-border">
+                <input
+                  value={newCouponCode}
+                  onChange={(e) => setNewCouponCode(e.target.value)}
+                  placeholder="Coupon Code (e.g. DIBOMBA)..."
+                  className="bg-white px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700 flex-1 uppercase"
+                />
+                <select
+                  value={newCouponDiscount}
+                  onChange={(e) => setNewCouponDiscount(e.target.value)}
+                  className="bg-white px-3 py-2 border border-border rounded-xl text-xs text-slate-600 outline-none"
+                >
+                  <option value="5%">5% Discount</option>
+                  <option value="10%">10% Discount</option>
+                  <option value="15%">15% Discount</option>
+                  <option value="20%">20% Discount</option>
+                  <option value="50%">50% Discount</option>
+                </select>
+                <button
+                  onClick={handleAddCoupon}
+                  className="px-4 py-2 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-xl text-xs font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Create Code
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-border text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3">Promo Code</th>
+                      <th className="pb-3">Discount Pct</th>
+                      <th className="pb-3">Expiry</th>
+                      <th className="pb-3">Campaign Status</th>
+                      <th className="pb-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coupons.map((c) => (
+                      <tr key={c.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/40 text-xs text-slate-600">
+                        <td className="py-3 font-extrabold text-indigo-600">{c.code}</td>
+                        <td className="py-3 font-semibold text-[#0D1117]">{c.discount}</td>
+                        <td className="py-3 text-slate-400">{c.expiryDate}</td>
+                        <td className="py-3">
+                          <Badge variant={c.status === "Active" ? "success" : "default"}>{c.status}</Badge>
+                        </td>
+                        <td className="py-3 text-right">
+                          <button
+                            onClick={() => setCoupons(coupons.filter(item => item.id !== c.id))}
+                            className="px-2 py-1 bg-red-50 text-red-500 rounded text-[10px] font-bold hover:bg-red-100"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 18: EDITORIAL BLOG */}
+          {activeTab === 18 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-4 animate-fadeIn">
+              <div className="flex items-center justify-between border-b border-border pb-4">
+                <div>
+                  <h3 className="font-bold text-base text-[#0D1117]">Editorial Blog Posts</h3>
+                  <p className="text-xs text-slate-500">Draft, edit and publish resource articles for the user landing page</p>
+                </div>
+                <button
+                  onClick={() => {
+                    const title = prompt("Enter new article title:");
+                    if (title) {
+                      setBlogs([...blogs, { id: Date.now(), title, category: "Tips", status: "Draft", date: "Just Now" }]);
+                    }
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-xl text-xs font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Create Article
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {blogs.map((b) => (
+                  <div key={b.id} className="p-4 bg-slate-50 rounded-xl border border-border flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-sm text-[#0D1117]">{b.title}</h4>
+                      <div className="text-[10px] text-slate-400 mt-1 flex gap-2">
+                        <span>Category: {b.category}</span>
+                        <span>·</span>
+                        <span>Created: {b.date}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge variant={b.status === "Published" ? "success" : "default"}>{b.status}</Badge>
+                      {b.status !== "Published" && (
+                        <button
+                          onClick={() => {
+                            setBlogs(blogs.map(item => item.id === b.id ? { ...item, status: "Published" } : item));
+                          }}
+                          className="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold hover:bg-emerald-100"
+                        >
+                          Publish
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setBlogs(blogs.filter(item => item.id !== b.id))}
+                        className="px-2.5 py-1.5 bg-red-50 text-red-500 rounded-lg text-[10px] font-bold hover:bg-red-100"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 19: SYSTEM SETTINGS */}
+          {activeTab === 19 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-6 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">System Settings</h3>
+                <p className="text-xs text-slate-500">Configure global metadata headers and customer support references</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider pb-2 border-b border-border">General Settings</h4>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Platform Title</label>
+                    <input
+                      value={generalSettings.title}
+                      onChange={(e) => setGeneralSettings({ ...generalSettings, title: e.target.value })}
+                      className="w-full px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Custom Domain</label>
+                    <input
+                      value={generalSettings.domain}
+                      onChange={(e) => setGeneralSettings({ ...generalSettings, domain: e.target.value })}
+                      className="w-full px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider pb-2 border-b border-border">Contact Information</h4>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Support Email Address</label>
+                    <input
+                      value={generalSettings.email}
+                      onChange={(e) => setGeneralSettings({ ...generalSettings, email: e.target.value })}
+                      className="w-full px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Support Phone Hotline</label>
+                    <input
+                      value={generalSettings.supportPhone}
+                      onChange={(e) => setGeneralSettings({ ...generalSettings, supportPhone: e.target.value })}
+                      className="w-full px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-border flex justify-end">
+                <button
+                  onClick={() => alert("Settings saved successfully!")}
+                  className="px-5 py-2.5 bg-[#0D1117] hover:opacity-90 text-white rounded-xl text-xs font-bold"
+                >
+                  Save Configuration
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 20: ADMIN PROFILE */}
+          {activeTab === 20 && (
+            <div className="bg-white rounded-2xl border border-border p-6 space-y-6 animate-fadeIn max-w-xl">
+              <div>
+                <h3 className="font-bold text-base text-[#0D1117]">Administrator Profile</h3>
+                <p className="text-xs text-slate-500">Edit credentials and authentication parameters</p>
+              </div>
+
+              <div className="flex items-center gap-4 border-b border-border pb-6">
+                <Avatar initials="AD" gradient="from-slate-700 to-slate-900" size="xl" />
+                <div>
+                  <h4 className="font-bold text-sm text-[#0D1117]">System Administrator</h4>
+                  <p className="text-xs text-slate-400">admin@fit.africa</p>
+                  <button className="mt-2 px-3 py-1.5 border border-border hover:bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 transition-colors">
+                    Upload Photo
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Admin Name</label>
+                    <input defaultValue="Adolf Eko" className="w-full px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Secure Phone</label>
+                    <input defaultValue="+237 671 00 22 11" className="w-full px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Email Address</label>
+                  <input defaultValue="admin@fit.africa" className="w-full px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700" />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-border flex justify-end gap-2">
+                <button
+                  onClick={() => alert("Profile updated!")}
+                  className="px-5 py-2.5 bg-[#0D1117] hover:opacity-90 text-white rounded-xl text-xs font-bold"
+                >
+                  Update Profile
+                </button>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* User Details Modal (Interactive View) */}
+      {selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedUser(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="font-extrabold text-[#0D1117]">User Profile Inspection</h3>
+              <button onClick={() => setSelectedUser(null)} className="p-1 hover:bg-slate-100 rounded text-slate-500">×</button>
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Avatar initials={selectedUser.photo} gradient="from-blue-600 to-indigo-600" size="md" />
+                <div>
+                  <div className="font-bold text-sm text-[#0D1117]">{selectedUser.name}</div>
+                  <div className="text-xs text-slate-400 capitalize">{selectedUser.role}</div>
+                </div>
+              </div>
+              <div className="space-y-2 pt-3 border-t border-border text-xs">
+                <div className="flex justify-between">
+                  <span className="font-semibold text-slate-400">Email:</span>
+                  <span className="text-[#0D1117] font-semibold">{selectedUser.email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold text-slate-400">Phone:</span>
+                  <span className="text-[#0D1117] font-semibold">{selectedUser.phone}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold text-slate-400">Country:</span>
+                  <span className="text-[#0D1117] font-semibold">{selectedUser.country}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold text-slate-400">Joined:</span>
+                  <span className="text-slate-500">{selectedUser.dateJoined}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold text-slate-400">Vetting Status:</span>
+                  <span className="font-semibold capitalize">{selectedUser.verified}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold text-slate-400">Account status:</span>
+                  <span className="font-semibold capitalize">{selectedUser.status}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="w-full py-2 bg-[#0D1117] hover:opacity-90 text-white rounded-xl text-xs font-bold mt-4"
+              >
+                Close Inspector
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Embedded styles for animation */}
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out forwards;
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ─── BOOTLOADER ──────────────────────────────────────────────────────────────
 
 function Bootloader() {
@@ -3799,9 +5964,9 @@ function Bootloader() {
 
 // ─── APP ROOT ────────────────────────────────────────────────────────────────
 
-export default function App() {
-  const [view, setView] = useState<View>("landing");
-  const [role, setRole] = useState<Role>("guest");
+export default function App({ initialRole = "guest", initialView = "landing" }: { initialRole?: Role; initialView?: View }) {
+  const [view, setView] = useState<View>(initialView);
+  const [role, setRole] = useState<Role>(initialRole);
 
   const handleNavigate = (v: View) => {
     setView(v);
@@ -3810,7 +5975,7 @@ export default function App() {
 
   const handleRoleSwitch = (r: Role) => setRole(r);
 
-  const hideNav = view === "login" || view === "signup";
+  const hideNav = view === "login" || view === "signup" || view === "admin";
 
   return (
     <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -3828,6 +5993,8 @@ export default function App() {
       {view === "signup" && <SignupPage onNavigate={handleNavigate} onRoleSwitch={handleRoleSwitch} />}
       {view === "account" && <AccountPage onNavigate={handleNavigate} role={role} />}
       {view === "buy-connects" && <BuyConnectsPage onNavigate={handleNavigate} />}
+      {view === "internships" && <InternshipsPage onNavigate={handleNavigate} />}
+      {view === "admin" && <AdminDashboard onNavigate={handleNavigate} />}
     </div>
   );
 }
