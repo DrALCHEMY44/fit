@@ -3736,6 +3736,67 @@ function BuyConnectsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
   );
 }
 
+// ─── BOOTLOADER ──────────────────────────────────────────────────────────────
+
+function Bootloader() {
+  const [fade, setFade] = useState(false);
+  const [mounted, setMounted] = useState(true);
+
+  useEffect(() => {
+    const fadeTimeout = setTimeout(() => {
+      setFade(true);
+    }, 3000);
+
+    const unmountTimeout = setTimeout(() => {
+      setMounted(false);
+    }, 3500);
+
+    return () => {
+      clearTimeout(fadeTimeout);
+      clearTimeout(unmountTimeout);
+    };
+  }, []);
+
+  if (!mounted) return null;
+
+  return (
+    <div
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0D1117] transition-opacity duration-500 ease-out ${
+        fade ? "opacity-0 pointer-events-none" : "opacity-100"
+      }`}
+    >
+      <div className="relative flex flex-col items-center">
+        
+        {/* Glowing background halo */}
+        <div className="absolute -inset-10 rounded-full bg-[#0284C7]/20 blur-3xl animate-pulse" />
+        
+        {/* Animated logo badge */}
+        <div className="relative w-28 h-28 bg-[#161F30]/85 border border-slate-800 rounded-3xl p-5 flex items-center justify-center shadow-2xl backdrop-blur-md">
+          {/* Dashboard ring indicator */}
+          <div className="absolute inset-0 rounded-3xl border border-dashed border-cyan-400/40 animate-[spin_20s_linear_infinite]" />
+          
+          <img
+            src="/loader-logo.png"
+            alt="FIT Load Logo"
+            className="w-full h-full object-contain filter drop-shadow-[0_0_12px_rgba(6,182,212,0.4)] animate-pulse"
+          />
+        </div>
+
+        {/* Loading details */}
+        <div className="mt-8 flex flex-col items-center gap-2">
+          <div className="text-white font-extrabold text-lg tracking-wider uppercase" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            Freelance Interconnect
+          </div>
+          <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-[0.25em] animate-pulse">
+            Booting system...
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 // ─── APP ROOT ────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -3753,6 +3814,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <Bootloader />
       {!hideNav && <Navbar view={view} role={role} onNavigate={handleNavigate} onRoleSwitch={handleRoleSwitch} />}
       {view === "landing" && <LandingPage onNavigate={handleNavigate} onRoleSwitch={handleRoleSwitch} />}
       {view === "freelancer" && <FreelancerDashboard onNavigate={handleNavigate} />}
