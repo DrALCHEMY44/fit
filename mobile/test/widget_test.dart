@@ -1,30 +1,47 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:freelance_interconnect/app/app.dart';
+import 'package:freelance_interconnect/core/api/session.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    Session.user.value = null;
+  });
+
+  testWidgets('boots to the splash screen', (WidgetTester tester) async {
     await tester.pumpWidget(const FITApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Branding renders while the stored session is being restored.
+    expect(find.text('Freelance Interconnect'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Let the splash timers (session restore + 3s delay) run out.
+    await tester.pumpAndSettle(const Duration(seconds: 4));
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  test('FitUser parses an API payload', () {
+    final user = FitUser.fromJson({
+      'id': 1,
+      'name': 'Diane Ngono',
+      'role': 'freelancer',
+      'connects_balance': 24,
+      'freelancer_profile': {
+        'title': 'Senior React Developer',
+        'availability': 'available',
+        'job_success_score': 97,
+        'rating': '4.97',
+        'skills': [
+          {'name': 'React'},
+          {'name': 'TypeScript'},
+        ],
+      },
+    });
+
+    expect(user.initials, 'DN');
+    expect(user.isFreelancer, isTrue);
+    expect(user.connectsBalance, 24);
+    expect(user.jss, 97);
+    expect(user.skills, ['React', 'TypeScript']);
   });
 }

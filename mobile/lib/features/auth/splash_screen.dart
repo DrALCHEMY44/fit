@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../app/app_shell.dart';
+import '../../core/api/fit_api.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import 'login_screen.dart';
@@ -33,14 +35,19 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    // Route to LoginScreen after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-        );
-      }
+    // Restore the stored session while the intro animation plays, then route
+    // to the app shell (valid token) or the login screen.
+    Future.wait<dynamic>([
+      FitApi.restoreSession(),
+      Future<void>.delayed(const Duration(seconds: 3)),
+    ]).then((results) {
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => results.first != null ? const AppShell() : const LoginScreen(),
+        ),
+      );
     });
   }
 

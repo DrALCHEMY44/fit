@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/fit_api.dart';
+import '../../core/api/session.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../shared/widgets/fit_gradient_button.dart';
@@ -12,8 +15,8 @@ class BuyConnectsScreen extends StatefulWidget {
 
 class _BuyConnectsScreenState extends State<BuyConnectsScreen> {
   int _stage = 1; // 1: Pick Package, 2: Payment details, 3: Success
-  String _currency = 'USD'; // 'USD' or 'XAF'
-  int _selectedPackId = 1;
+  String _currency = 'XAF'; // 'USD' or 'XAF'
+  int _selectedPackId = 0;
   String _paymentMethod = 'momo_mtn'; // 'momo_mtn', 'momo_orange', 'card', 'paypal'
 
   final TextEditingController _phoneController = TextEditingController();
@@ -23,16 +26,51 @@ class _BuyConnectsScreenState extends State<BuyConnectsScreen> {
   final TextEditingController _cardCvvController = TextEditingController();
 
   bool _isSubmitting = false;
+  bool _loading = true;
 
-  final List<Map<String, dynamic>> _packs = [
-    { 'id': 1, 'connects': 10, 'priceUSD': 1.50, 'costPerUSD': 0.15, 'label': 'Starter Pack', 'badge': null, 'save': null },
-    { 'id': 2, 'connects': 20, 'priceUSD': 3.00, 'costPerUSD': 0.15, 'label': 'Starter Plus', 'badge': null, 'save': null },
-    { 'id': 3, 'connects': 50, 'priceUSD': 6.00, 'costPerUSD': 0.12, 'label': 'Most Popular', 'badge': 'Most Popular', 'save': null },
-    { 'id': 4, 'connects': 100, 'priceUSD': 10.00, 'costPerUSD': 0.10, 'label': 'Best Value', 'badge': 'Best Value', 'save': 'Save 33%' },
-    { 'id': 5, 'connects': 200, 'priceUSD': 18.00, 'costPerUSD': 0.09, 'label': 'Power Pack', 'badge': 'Power Pack', 'save': 'Save 40%' },
-  ];
+  List<Map<String, dynamic>> _packs = [];
 
-  static const double _xafRate = 600.0;
+  double _xafRate = 600.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _phoneController.text = Session.current?.phone ?? '';
+    _loadPacks();
+  }
+
+  Future<void> _loadPacks() async {
+    try {
+      final packs = await FitApi.connectPacks();
+      if (!mounted) return;
+      setState(() {
+        _packs = packs.map((p) {
+          final priceUsd = double.tryParse('${p['price_usd'] ?? 0}') ?? 0;
+          final priceXaf = double.tryParse('${p['price_xaf'] ?? 0}') ?? 0;
+          final connects = (p['connects'] as num?)?.toInt() ?? 0;
+          return {
+            'id': p['id'],
+            'connects': connects,
+            'priceUSD': priceUsd,
+            'priceXAF': priceXaf,
+            'costPerUSD': connects > 0 ? priceUsd / connects : 0.0,
+            'label': p['name']?.toString() ?? 'Pack',
+            'badge': p['badge'],
+            'save': p['savings_label'],
+          };
+        }).toList();
+        if (_packs.isNotEmpty) {
+          _selectedPackId = _packs.first['id'] as int;
+          final firstUsd = _packs.first['priceUSD'] as double;
+          final firstXaf = _packs.first['priceXAF'] as double;
+          if (firstUsd > 0) _xafRate = firstXaf / firstUsd;
+        }
+        _loading = false;
+      });
+    } on ApiException {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -61,19 +99,31 @@ class _BuyConnectsScreenState extends State<BuyConnectsScreen> {
   }
 
   Map<String, dynamic> get _selectedPack {
-    return _packs.firstWhere((p) => p['id'] == _selectedPackId);
+    return _packs.firstWhere((p) => p['id'] == _selectedPackId, orElse: () => _packs.first);
   }
 
-  void _handlePay() {
+  Future<void> _handlePay() async {
     setState(() => _isSubmitting = true);
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-          _stage = 3;
-        });
-      }
-    });
+    try {
+      // Sandbox settlement — in production the Mobile Money webhook confirms.
+      await FitApi.purchaseConnects(
+        _selectedPackId,
+        _paymentMethod == 'momo_orange' ? 'orange_money' : _paymentMethod == 'momo_mtn' ? 'mtn_momo' : _paymentMethod,
+        _currency,
+        phoneNumber: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _stage = 3;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.firstError), backgroundColor: AppColors.danger),
+      );
+    }
   }
 
   @override
@@ -108,6 +158,9 @@ class _BuyConnectsScreenState extends State<BuyConnectsScreen> {
   }
 
   Widget _buildStageContent() {
+    if (_loading || _packs.isEmpty) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.fitBlue));
+    }
     if (_stage == 1) return _buildPackSelection();
     if (_stage == 2) return _buildPaymentDetails();
     return _buildSuccessStage();

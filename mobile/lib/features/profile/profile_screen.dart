@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/api/fit_api.dart';
+import '../../core/api/session.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../shared/widgets/fit_avatar.dart';
@@ -16,10 +18,12 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool _available = true;
+  bool _available = Session.current?.availability != 'unavailable';
 
   @override
   Widget build(BuildContext context) {
+    final user = Session.current;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -35,8 +39,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Row(
                 children: [
-                  const FitAvatar.xl(
-                    initials: 'DN',
+                  FitAvatar.xl(
+                    initials: user?.initials ?? 'FI',
                     gradient: AppColors.gradientBlue,
                   ),
                   const SizedBox(width: 16),
@@ -44,14 +48,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Diane Ngono', style: AppTextStyles.headlineMedium),
-                        Text('Senior React & TypeScript Developer', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                        Text(user?.name ?? 'FIT User', style: AppTextStyles.headlineMedium),
+                        Text(user?.title ?? 'Complete your profile', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
                         const SizedBox(height: 4),
                         Row(
                           children: [
                             const Icon(Icons.location_on_outlined, size: 12, color: AppColors.textTertiary),
                             const SizedBox(width: 4),
-                            Text('Douala, Cameroon', style: AppTextStyles.caption.copyWith(color: AppColors.textTertiary)),
+                            Text(user?.cityName != null ? '${user!.cityName}, Cameroon' : 'Cameroon', style: AppTextStyles.caption.copyWith(color: AppColors.textTertiary)),
                           ],
                         ),
                       ],
@@ -76,7 +80,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Switch(
                     value: _available,
                     activeColor: AppColors.fitBlue,
-                    onChanged: (val) => setState(() => _available = val),
+                    onChanged: (val) {
+                      setState(() => _available = val);
+                      FitApi.setAvailability(val).catchError((_) {});
+                    },
                   ),
                 ],
               ),
@@ -100,9 +107,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _StatItem(label: 'Earnings', value: '\$48.2K+'),
-                  _StatItem(label: 'Jobs completed', value: '84'),
-                  _StatItem(label: 'Rating', value: '4.97 ★'),
+                  _StatItem(label: 'Earnings', value: FitApi.formatMoney(user?.totalEarned ?? 0)),
+                  _StatItem(label: 'Jobs completed', value: '${user?.completedOrders ?? 0}'),
+                  _StatItem(label: 'Rating', value: '${(user?.rating ?? 0).toStringAsFixed(2)} ★'),
                 ],
               ),
               const SizedBox(height: 16),
@@ -110,7 +117,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 12),
               Text('Job Success Score', style: AppTextStyles.labelMedium.copyWith(color: AppColors.textSecondary)),
               const SizedBox(height: 6),
-              const JssBar(score: 97),
+              JssBar(score: Session.current?.jss ?? 0),
             ],
           ),
         ),
@@ -128,20 +135,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Text('Skills', style: AppTextStyles.titleLarge),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: const [
-                  SkillTag(label: 'React'),
-                  SkillTag(label: 'TypeScript'),
-                  SkillTag(label: 'Node.js'),
-                  SkillTag(label: 'GraphQL'),
-                  SkillTag(label: 'AWS'),
-                  SkillTag(label: 'Next.js'),
-                  SkillTag(label: 'TailwindCSS'),
-                  SkillTag(label: 'Figma'),
-                ],
-              ),
+              if ((user?.skills ?? []).isEmpty)
+                Text('No skills added yet.', style: AppTextStyles.caption.copyWith(color: AppColors.textTertiary))
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: (user?.skills ?? []).map((s) => SkillTag(label: s)).toList(),
+                ),
             ],
           ),
         ),

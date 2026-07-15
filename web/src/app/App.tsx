@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
 import {
   Search, Bell, MessageSquare, ChevronDown, Star, ShieldCheck,
   Clock, TrendingUp, Briefcase, Code, PenTool, FileText,
@@ -14,6 +14,15 @@ import {
   CreditCard, Loader2, Sparkles, CalendarDays, GraduationCap,
   GitBranch, Languages, Smartphone, Shield, Brain, Calendar,
 } from "lucide-react";
+import * as fit from "../lib/api";
+import { ApiError, type ApiUser } from "../lib/api";
+import {
+  unwrap, gradientFor, initialsOf, formatMoney, timeAgo,
+  toJobVM, toFreelancerVM, toContractVM, toThreadVM, toMessageVM,
+  toInternshipVM, toProposalVM,
+  type JobVM, type FreelancerVM, type ContractVM, type ThreadVM,
+  type MessageVM, type InternshipVM, type ProposalVM,
+} from "../lib/adapters";
 
 type View =
   | "landing"
@@ -33,280 +42,96 @@ type View =
 type Lang = "en" | "fr";
 type Role = "guest" | "freelancer" | "client" | "admin";
 
+// ─── APP SESSION (real API auth state) ──────────────────────────────────────
+
+type AppSession = {
+  user: ApiUser | null;
+  setUser: (user: ApiUser | null) => void;
+  refreshUser: () => Promise<void>;
+  logout: () => Promise<void>;
+  selectedJobId: number | null;
+  setSelectedJobId: (id: number | null) => void;
+  openConversationId: number | null;
+  setOpenConversationId: (id: number | null) => void;
+};
+
+const AppCtx = createContext<AppSession>({
+  user: null,
+  setUser: () => {},
+  refreshUser: async () => {},
+  logout: async () => {},
+  selectedJobId: null,
+  setSelectedJobId: () => {},
+  openConversationId: null,
+  setOpenConversationId: () => {},
+});
+
+function useApp(): AppSession {
+  return useContext(AppCtx);
+}
+
+function roleOf(user: ApiUser | null): Role {
+  if (!user) return "guest";
+  if (user.role === "admin" || user.role === "super_admin") return "admin";
+  return user.role;
+}
+
+/** Fetch-on-mount helper with loading / error / reload state. */
+function useFetch<T>(loader: () => Promise<T>, deps: unknown[] = []) {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    loader()
+      .then((result) => setData(result))
+      .catch((err) => setError(err instanceof ApiError ? err.firstError : "Something went wrong."))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  return { data, setData, loading, error, reload };
+}
+
+function LoadingBlock({ label = "Loading…" }: { label?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
+      <Loader2 size={28} className="animate-spin text-[#0284C7]" />
+      <span className="text-sm font-medium">{label}</span>
+    </div>
+  );
+}
+
+function ErrorBlock({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 gap-3">
+      <AlertCircle size={28} className="text-red-400" />
+      <span className="text-sm font-medium text-slate-500">{message}</span>
+      {onRetry && (
+        <button onClick={onRetry} className="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
+function EmptyBlock({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 gap-2 text-slate-400">
+      <Info size={26} />
+      <span className="text-sm font-medium">{message}</span>
+    </div>
+  );
+}
+
 // ─── MOCK DATA ──────────────────────────────────────────────────────────────
-
-const JOBS = [
-  {
-    id: 1,
-    title: "Full-Stack React / Node.js Developer for FinTech Dashboard",
-    type: "hourly",
-    budget: { min: 25, max: 45, currency: "USD" },
-    posted: "2 hours ago",
-    description:
-      "We are building a mobile money aggregation platform for the CEMAC region. We need an experienced React developer with Node.js backend skills to build our analytics dashboard with real-time transaction tracking.",
-    skills: ["React", "Node.js", "TypeScript", "PostgreSQL", "REST API"],
-    duration: "3–6 months",
-    level: "Expert",
-    proposals: 12,
-    client: {
-      name: "MTN FinTech Lab",
-      location: "Douala, Cameroon",
-      verified: true,
-      paymentVerified: true,
-      rating: 4.9,
-      spent: "$12,400",
-      jobs: 8,
-    },
-    saved: false,
-    category: "Web Development",
-  },
-  {
-    id: 2,
-    title: "Brand Identity & Logo Design for Pan-African E-Commerce Startup",
-    type: "fixed",
-    budget: { amount: 850, currency: "USD" },
-    posted: "5 hours ago",
-    description:
-      "Looking for a talented designer to create a compelling brand identity for our cross-border e-commerce platform targeting 5 African markets. Must deliver logo, color system, and brand guidelines.",
-    skills: ["Logo Design", "Brand Identity", "Adobe Illustrator", "Figma"],
-    duration: "1–2 weeks",
-    level: "Intermediate",
-    proposals: 7,
-    client: {
-      name: "Afrikart Commerce",
-      location: "Nairobi, Kenya",
-      verified: true,
-      paymentVerified: true,
-      rating: 4.7,
-      spent: "$3,200",
-      jobs: 3,
-    },
-    saved: true,
-    category: "Design & Creative",
-  },
-  {
-    id: 3,
-    title: "Bilingual Content Writer — French & English Tech Articles",
-    type: "fixed",
-    budget: { amount: 150000, currency: "XAF" },
-    posted: "1 day ago",
-    description:
-      "We publish a weekly newsletter on African tech startups and need a bilingual writer producing in-depth articles in both French and English. SEO and audience-first writing a must.",
-    skills: ["Content Writing", "French", "English", "Tech Journalism", "SEO"],
-    duration: "Ongoing",
-    level: "Intermediate",
-    proposals: 19,
-    client: {
-      name: "TechAfrique Media",
-      location: "Yaoundé, Cameroon",
-      verified: true,
-      paymentVerified: false,
-      rating: 4.5,
-      spent: "XAF 680,000",
-      jobs: 14,
-    },
-    saved: false,
-    category: "Writing & Translation",
-  },
-  {
-    id: 4,
-    title: "Flutter Developer — Cross-Platform AgriTech Mobile App",
-    type: "hourly",
-    budget: { min: 20, max: 35, currency: "USD" },
-    posted: "2 days ago",
-    description:
-      "Building a crop monitoring and market price app for smallholder farmers across West Africa. Offline-first architecture is a critical requirement — users often work in low-connectivity rural environments.",
-    skills: ["Flutter", "Dart", "Firebase", "REST API", "UI/UX"],
-    duration: "4–6 months",
-    level: "Expert",
-    proposals: 5,
-    client: {
-      name: "GreenField AgriTech",
-      location: "Lagos, Nigeria",
-      verified: true,
-      paymentVerified: true,
-      rating: 5.0,
-      spent: "$28,100",
-      jobs: 12,
-    },
-    saved: false,
-    category: "Mobile Development",
-  },
-  {
-    id: 5,
-    title: "Virtual Assistant — Customer Support for SaaS Platform",
-    type: "hourly",
-    budget: { min: 5, max: 10, currency: "USD" },
-    posted: "3 days ago",
-    description:
-      "Seeking a detail-oriented VA to handle customer support tickets, onboarding emails, and basic administrative tasks for our growing B2B SaaS platform. Must be fluent in French and English.",
-    skills: ["Customer Support", "Zendesk", "Email Management", "French", "Excel"],
-    duration: "Long-term",
-    level: "Entry",
-    proposals: 34,
-    client: {
-      name: "CloudOps Cameroon",
-      location: "Bafoussam, Cameroon",
-      verified: true,
-      paymentVerified: true,
-      rating: 4.6,
-      spent: "$5,900",
-      jobs: 21,
-    },
-    saved: true,
-    category: "Admin Support",
-  },
-];
-
-const FREELANCERS = [
-  {
-    id: 1,
-    name: "Diane Ngono",
-    title: "Senior React & TypeScript Developer",
-    initials: "DN",
-    color: "from-[#0284C7] to-[#06B6D4]",
-    location: "Douala, Cameroon",
-    jss: 97,
-    hourlyRate: 35,
-    currency: "USD",
-    totalEarnings: "$48,200+",
-    skills: ["React", "TypeScript", "Node.js", "GraphQL", "AWS"],
-    bio: "5+ years building scalable web applications for African startups and international clients. Specializing in financial technology and e-commerce.",
-    completedJobs: 84,
-    rating: 4.97,
-    available: true,
-    topRated: true,
-  },
-  {
-    id: 2,
-    name: "Kwame Asante",
-    title: "UI/UX Designer & Brand Strategist",
-    initials: "KA",
-    color: "from-[#7C3AED] to-[#A78BFA]",
-    location: "Accra, Ghana",
-    jss: 94,
-    hourlyRate: 28,
-    currency: "USD",
-    totalEarnings: "$31,500+",
-    skills: ["Figma", "Adobe XD", "Brand Identity", "Motion Design", "Webflow"],
-    bio: "Award-winning designer crafting digital experiences for pan-African brands. I blend modern design with local cultural context.",
-    completedJobs: 56,
-    rating: 4.95,
-    available: true,
-    topRated: true,
-  },
-  {
-    id: 3,
-    name: "Amina Hassan",
-    title: "Full-Stack Python & Django Developer",
-    initials: "AH",
-    color: "from-[#16A34A] to-[#34D399]",
-    location: "Nairobi, Kenya",
-    jss: 91,
-    hourlyRate: 30,
-    currency: "USD",
-    totalEarnings: "$22,100+",
-    skills: ["Python", "Django", "PostgreSQL", "Docker", "Vue.js"],
-    bio: "Backend specialist with deep expertise in fintech and healthcare data systems. Building robust APIs that power mission-critical applications.",
-    completedJobs: 41,
-    rating: 4.92,
-    available: false,
-    topRated: false,
-  },
-  {
-    id: 4,
-    name: "Jean-Pierre Mvondo",
-    title: "Mobile Developer & Flutter Expert",
-    initials: "JM",
-    color: "from-[#D97706] to-[#FBBF24]",
-    location: "Yaoundé, Cameroon",
-    jss: 96,
-    hourlyRate: 25,
-    currency: "USD",
-    totalEarnings: "$19,800+",
-    skills: ["Flutter", "React Native", "Firebase", "Swift", "Kotlin"],
-    bio: "Cross-platform mobile specialist delivering pixel-perfect apps for African and global markets. 4 apps with 100k+ downloads.",
-    completedJobs: 38,
-    rating: 4.94,
-    available: true,
-    topRated: true,
-  },
-  {
-    id: 5,
-    name: "Fatima Diallo",
-    title: "Content Strategist & SEO Copywriter",
-    initials: "FD",
-    color: "from-[#DB2777] to-[#F472B6]",
-    location: "Dakar, Senegal",
-    jss: 89,
-    hourlyRate: 18,
-    currency: "USD",
-    totalEarnings: "$11,400+",
-    skills: ["SEO", "Content Strategy", "Copywriting", "French", "WordPress"],
-    bio: "Trilingual content creator (French/English/Wolof) crafting compelling narratives for African businesses going global.",
-    completedJobs: 67,
-    rating: 4.88,
-    available: true,
-    topRated: false,
-  },
-  {
-    id: 6,
-    name: "Chukwuemeka Obi",
-    title: "Data Analyst & Business Intelligence",
-    initials: "CO",
-    color: "from-[#0891B2] to-[#22D3EE]",
-    location: "Lagos, Nigeria",
-    jss: 93,
-    hourlyRate: 32,
-    currency: "USD",
-    totalEarnings: "$27,600+",
-    skills: ["Python", "Tableau", "Power BI", "SQL", "Machine Learning"],
-    bio: "Transforming raw data into actionable insights for FMCG, fintech, and agritech companies across sub-Saharan Africa.",
-    completedJobs: 52,
-    rating: 4.91,
-    available: true,
-    topRated: false,
-  },
-];
-
-const CHAT_MESSAGES = [
-  { id: 1, sender: "them", text: "Hello! I saw your Flutter profile and I think you would be a great fit for our AgriTech app project.", time: "9:45 AM" },
-  { id: 2, sender: "me", text: "Thank you! Your project looks very interesting. I have experience building offline-first Flutter apps which sounds perfect for rural areas.", time: "9:52 AM" },
-  { id: 3, sender: "them", text: "Exactly! That offline capability is crucial. Our users often have limited connectivity in the field.", time: "9:55 AM" },
-  { id: 4, sender: "me", text: "Understood. I used Hive for local storage with a background sync service in my last similar project — achieved ~95% data integrity even with spotty 2G connections.", time: "10:01 AM" },
-  { id: 5, sender: "them", text: "That sounds perfect! Can we schedule a call to discuss the milestone deliverables and your proposed timeline?", time: "10:32 AM" },
-];
-
-const CONTRACTS = [
-  {
-    id: 1,
-    title: "Full-Stack React / Node.js — FinTech Dashboard",
-    client: "MTN FinTech Lab",
-    freelancer: "Diane Ngono",
-    totalAmount: 4500,
-    currency: "USD",
-    status: "active",
-    milestones: [
-      { id: 1, name: "UI/UX Mockups & Design System", amount: 800, status: "approved", dueDate: "June 15, 2025" },
-      { id: 2, name: "Frontend Dashboard — Phase 1", amount: 1200, status: "in_review", dueDate: "July 5, 2025" },
-      { id: 3, name: "Backend API Integration", amount: 1500, status: "funded", dueDate: "July 28, 2025" },
-      { id: 4, name: "Testing & Deployment", amount: 1000, status: "pending", dueDate: "Aug 15, 2025" },
-    ],
-  },
-  {
-    id: 2,
-    title: "Brand Identity & Logo Design — Afrikart",
-    client: "Afrikart Commerce",
-    freelancer: "Kwame Asante",
-    totalAmount: 850,
-    currency: "USD",
-    status: "completed",
-    milestones: [
-      { id: 1, name: "Initial Concepts (3 directions)", amount: 250, status: "approved", dueDate: "June 2, 2025" },
-      { id: 2, name: "Final Design Package & Brand Book", amount: 600, status: "approved", dueDate: "June 10, 2025" },
-    ],
-  },
-];
 
 // ─── SHARED COMPONENTS ──────────────────────────────────────────────────────
 
@@ -377,89 +202,9 @@ function MilestoneStatus({ status }: { status: string }) {
 
 // ─── ADMIN MOCK DATA ──────────────────────────────────────────────────────────
 
-const ADMIN_USERS_LIST = [
-  { id: 1, name: "Diane Ngono", email: "diane.ngono@gmail.com", phone: "+237 677 889 900", country: "Cameroon", role: "freelancer", status: "active", verified: "verified", dateJoined: "Jan 12, 2025", photo: "DN" },
-  { id: 2, name: "Kwame Asante", email: "kwame.asante@yahoo.com", phone: "+233 24 555 6677", country: "Ghana", role: "freelancer", status: "active", verified: "verified", dateJoined: "Feb 18, 2025", photo: "KA" },
-  { id: 3, name: "Afrikart Commerce", email: "contact@afrikart.com", phone: "+237 699 112 233", country: "Cameroon", role: "client", status: "active", verified: "verified", dateJoined: "Mar 02, 2025", photo: "AC" },
-  { id: 4, name: "GreenField AgriTech", email: "info@greenfield.io", phone: "+234 803 444 5555", country: "Nigeria", role: "client", status: "active", verified: "pending", dateJoined: "Apr 22, 2025", photo: "GA" },
-  { id: 5, name: "Marc Ndjock", email: "m.ndjock@outlook.fr", phone: "+237 655 443 322", country: "Cameroon", role: "freelancer", status: "suspended", verified: "unverified", dateJoined: "May 10, 2025", photo: "MN" },
-  { id: 6, name: "Sylvie Eko", email: "sylvie.eko@gmail.com", phone: "+237 671 223 344", country: "Cameroon", role: "freelancer", status: "active", verified: "pending", dateJoined: "Jun 14, 2025", photo: "SE" },
-];
-
-const ADMIN_PROJECTS_LIST = [
-  { id: 101, name: "CEMAC FinTech Dashboard", client: "MTN FinTech Lab", freelancer: "Diane Ngono", budget: "XAF 850,000", deadline: "July 10, 2025", status: "In Progress" },
-  { id: 102, name: "AgriTrack Mobile App", client: "GreenField AgriTech", freelancer: "Kwame Asante", budget: "USD 2,400", deadline: "Aug 15, 2025", status: "Open" },
-  { id: 103, name: "Afrikart E-Commerce Platform", client: "Afrikart Commerce", freelancer: "Diane Ngono", budget: "USD 4,200", deadline: "June 20, 2025", status: "Completed" },
-  { id: 104, name: "Legal Document Translation", client: "TechAfrique Media", freelancer: "Sylvie Eko", budget: "XAF 120,000", deadline: "July 01, 2025", status: "Cancelled" },
-];
-
-const ADMIN_TRANSACTIONS_LIST = [
-  { id: "TXN-88291", client: "MTN FinTech Lab", freelancer: "Diane Ngono", amount: "XAF 850,000", method: "MTN Mobile Money", status: "Escrow Funded", date: "June 25, 2025" },
-  { id: "TXN-88292", client: "Afrikart Commerce", freelancer: "Diane Ngono", amount: "USD 4,200", method: "Visa Card", status: "Released", date: "June 20, 2025" },
-  { id: "TXN-88293", client: "GreenField AgriTech", freelancer: "Kwame Asante", amount: "USD 600", method: "PayPal", status: "Refunded", date: "June 18, 2025" },
-  { id: "TXN-88294", client: "TechAfrique Media", freelancer: "Sylvie Eko", amount: "XAF 120,000", method: "Orange Money", status: "Released", date: "June 12, 2025" },
-];
-
-const ADMIN_WITHDRAWALS_LIST = [
-  { id: 1, freelancer: "Diane Ngono", amount: "XAF 450,000", method: "MTN MoMo", date: "June 28, 2025", status: "Pending" },
-  { id: 2, freelancer: "Kwame Asante", amount: "USD 1,200", method: "PayPal", date: "June 27, 2025", status: "Approved" },
-  { id: 3, freelancer: "Sylvie Eko", amount: "XAF 75,000", method: "Orange Money", date: "June 26, 2025", status: "Rejected" },
-];
-
-const ADMIN_DISPUTES_LIST = [
-  { id: "DSP-302", client: "GreenField AgriTech", freelancer: "Kwame Asante", project: "AgriTrack Mobile App", date: "June 24, 2025", status: "Open" },
-  { id: "DSP-303", client: "TechAfrique Media", freelancer: "Sylvie Eko", project: "Legal Document Translation", date: "June 22, 2025", status: "Resolved" },
-  { id: "DSP-304", client: "MTN FinTech Lab", freelancer: "Diane Ngono", project: "CEMAC FinTech Dashboard", date: "June 15, 2025", status: "Pending" },
-];
-
-const ADMIN_REVIEWS_LIST = [
-  { id: 1, reviewer: "MTN FinTech Lab", user: "Diane Ngono", rating: 5, comment: "Diane did an incredible job building our CEMAC mobile money integration! Very professional.", date: "June 26, 2025", hidden: false },
-  { id: 2, reviewer: "Sylvie Eko", user: "TechAfrique Media", rating: 2, comment: "Client kept changing project requirements without adjusting the milestone budget.", date: "June 24, 2025", hidden: false },
-  { id: 3, reviewer: "Afrikart Commerce", user: "Diane Ngono", rating: 5, comment: "Exceptional UI coding and robust backend integration. Will hire again.", date: "June 20, 2025", hidden: false },
-];
-
-const ADMIN_CATEGORIES_LIST = [
-  { id: 1, name: "Software Development", icon: "Code", count: 148 },
-  { id: 2, name: "Design & Creative", icon: "PenTool", count: 96 },
-  { id: 3, name: "Writing & Translation", icon: "FileText", count: 54 },
-  { id: 4, name: "Marketing & Sales", icon: "TrendingUp", count: 42 },
-];
-
-const ADMIN_SKILLS_LIST = [
-  { id: 1, skill: "React", category: "Software Development", count: 85 },
-  { id: 2, skill: "TypeScript", category: "Software Development", count: 64 },
-  { id: 3, skill: "Figma", category: "Design & Creative", count: 72 },
-  { id: 4, skill: "Flutter", category: "Software Development", count: 34 },
-];
-
-const ADMIN_NOTIFICATIONS_LIST = [
-  { id: 1, title: "Scheduled Maintenance", message: "FIT platform will be down for 2 hours on Sunday, July 6th.", audience: "All Users", date: "June 28, 2025" },
-  { id: 2, title: "New Connects Rules", message: "Connects prices updated in XAF. Please check packages.", audience: "Freelancers", date: "June 25, 2025" },
-];
-
-const ADMIN_COUPONS_LIST = [
-  { id: 1, code: "WELCOME237", discount: "15%", expiryDate: "Dec 31, 2025", status: "Active" },
-  { id: 2, code: "MOMO5", discount: "5%", expiryDate: "Aug 30, 2025", status: "Active" },
-  { id: 3, code: "EXPIRED50", discount: "50%", expiryDate: "May 01, 2025", status: "Expired" },
-];
-
-const ADMIN_COUNTRIES_LIST = [
-  { id: 1, country: "Cameroon", currency: "XAF", status: "Active" },
-  { id: 2, country: "Ivory Coast", currency: "XOF", status: "Active" },
-  { id: 3, country: "Nigeria", currency: "NGN", status: "Active" },
-  { id: 4, country: "Ghana", currency: "GHS", status: "Active" },
-];
-
 const ADMIN_BLOGS_LIST = [
   { id: 1, title: "How Mobile Money is Transforming African Freelancing", category: "FinTech", status: "Published", date: "June 26, 2025" },
   { id: 2, title: "Top 10 High-Income Tech Skills to Learn in Cameroon in 2025", category: "Education", status: "Draft", date: "June 24, 2025" },
-];
-
-const ADMIN_PLANS_LIST = [
-  { id: 1, name: "Free Tier", price: "XAF 0", billing: "forever", subscribers: 1240 },
-  { id: 2, name: "Pro Plan", price: "XAF 5,000", billing: "month", subscribers: 420 },
-  { id: 3, name: "Business Plan", price: "XAF 15,000", billing: "month", subscribers: 110 },
-  { id: 4, name: "Enterprise Plan", price: "XAF 45,000", billing: "year", subscribers: 15 },
 ];
 
 // ─── TRANSLATIONS & i18n ────────────────────────────────────────────────────
@@ -541,14 +286,6 @@ function t(key: string, lang: Lang): string {
 
 // ─── INTERNSHIP MOCK DATA ───────────────────────────────────────────────────
 
-const INTERNSHIPS = [
-  { id: 1, title: "Frontend Engineering Intern", company: "MTN Innovation Lab", location: "Douala, Cameroon", duration: "3 months", stipend: "XAF 150,000/mo", skills: ["React", "TypeScript", "CSS"], type: "Hybrid", paid: true, description: "Work alongside senior engineers building the next generation of mobile money dashboards. Learn React, design systems, and agile development." },
-  { id: 2, title: "UI/UX Design Intern", company: "Afrikart Commerce", location: "Yaoundé, Cameroon", duration: "4 months", stipend: "XAF 120,000/mo", skills: ["Figma", "Adobe XD", "Prototyping"], type: "Remote", paid: true, description: "Help redesign the Afrikart mobile app experience. Collaborate with product managers on user research and prototyping." },
-  { id: 3, title: "Data Science Intern", company: "GreenField AgriTech", location: "Bamenda, Cameroon", duration: "6 months", stipend: "XAF 200,000/mo", skills: ["Python", "SQL", "Machine Learning"], type: "On-site", paid: true, description: "Analyze agricultural data from IoT sensors across 3 West African countries. Build predictive models for crop yield optimization." },
-  { id: 4, title: "Backend Developer Intern", company: "CloudOps Cameroon", location: "Bafoussam, Cameroon", duration: "3 months", stipend: "XAF 100,000/mo", skills: ["Node.js", "PostgreSQL", "Docker"], type: "Remote", paid: true, description: "Contribute to our cloud infrastructure platform. Write APIs, optimize databases, and learn DevOps best practices." },
-  { id: 5, title: "Content & Social Media Intern", company: "TechAfrique Media", location: "Douala, Cameroon", duration: "3 months", stipend: "Unpaid", skills: ["Content Writing", "French", "SEO"], type: "Remote", paid: false, description: "Create bilingual content about Africa's tech ecosystem. Manage social media accounts and track engagement analytics." },
-];
-
 // ─── AI MATCHING MOCK RESULTS ───────────────────────────────────────────────
 
 const AI_MATCH_RESULTS = [
@@ -581,6 +318,7 @@ function Navbar({ view, role, onNavigate, onRoleSwitch }: {
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [lang, setLang] = useLang();
+  const { user, setUser, logout } = useApp();
   const isDark = view === "landing";
 
   const navBg = isDark ? "bg-[#0D1117]" : "bg-white border-b border-border";
@@ -655,29 +393,34 @@ function Navbar({ view, role, onNavigate, onRoleSwitch }: {
               </button>
               <div className="flex items-center gap-2 pl-2 border-l border-border">
                 <button
-                  onClick={() => {
-                    let nextRole: Role = "freelancer";
-                    let nextView: View = "freelancer";
-                    if (role === "freelancer") {
-                      nextRole = "client";
-                      nextView = "client";
-                    } else if (role === "client") {
-                      nextRole = "admin";
-                      nextView = "admin";
-                    } else {
-                      nextRole = "freelancer";
-                      nextView = "freelancer";
+                  onClick={async () => {
+                    if (user && (user.role === "admin" || user.role === "super_admin")) {
+                      onRoleSwitch("admin");
+                      onNavigate("admin");
+                      return;
+                    }
+                    const nextRole = role === "freelancer" ? "client" : "freelancer";
+                    if (user) {
+                      try {
+                        const updated = unwrap(await fit.profile.switchRole(nextRole));
+                        setUser(updated);
+                      } catch {
+                        return;
+                      }
                     }
                     onRoleSwitch(nextRole);
-                    onNavigate(nextView);
+                    onNavigate(nextRole === "client" ? "client" : "freelancer");
                   }}
                   className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors text-xs font-medium text-slate-600"
                 >
                   <RotateCcw size={11} />
-                  {role === "freelancer" ? t("clientView", lang) : role === "client" ? t("adminView", lang) : t("freelancerView", lang)}
+                  {role === "freelancer" ? t("clientView", lang) : role === "client" ? t("freelancerView", lang) : t("freelancerView", lang)}
                 </button>
                 <button onClick={() => onNavigate("account")} className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0284C7] to-[#06B6D4] flex items-center justify-center text-white text-xs font-bold cursor-pointer hover:opacity-90 transition-opacity">
-                  {role === "freelancer" ? "DN" : "AF"}
+                  {user ? initialsOf(user.name) : "FI"}
+                </button>
+                <button onClick={() => logout()} title="Log out" className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+                  <LogOut size={16} className={isDark ? "text-slate-400" : "text-slate-500"} />
                 </button>
               </div>
             </>
@@ -738,6 +481,17 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
   const [lang] = useLang();
   const [aiQuery, setAiQuery] = useState("");
   const [showAiResults, setShowAiResults] = useState(false);
+
+  const landingState = useFetch(async () => {
+    const [talent, internshipList] = await Promise.all([
+      fit.freelancers.search({ sort: "rating" }).catch(() => null),
+      fit.internships.list().catch(() => null),
+    ]);
+    return {
+      topTalent: (talent?.data ?? []).slice(0, 3).map(toFreelancerVM),
+      internships: (internshipList?.data ?? []).slice(0, 4).map(toInternshipVM),
+    };
+  }, []);
 
   const handleAiMatch = () => {
     if (!aiQuery.trim()) return;
@@ -963,7 +717,7 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {FREELANCERS.slice(0, 3).map((f) => (
+          {(landingState.data?.topTalent ?? []).map((f) => (
             <div key={f.id} className="bg-white rounded-2xl border border-border p-5 hover:shadow-md hover:border-[#0284C7]/20 transition-all">
               <div className="flex items-start gap-3 mb-4">
                 <Avatar initials={f.initials} gradient={f.color} size="lg" />
@@ -1009,7 +763,7 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
             </button>
           </div>
           <div className="flex-shrink-0 grid grid-cols-2 gap-3">
-            {INTERNSHIPS.slice(0, 4).map((intern) => (
+            {(landingState.data?.internships ?? []).map((intern) => (
               <div key={intern.id} className="bg-white/10 border border-white/15 rounded-xl p-3.5 backdrop-blur-sm min-w-[160px]">
                 <div className="text-xs font-bold text-white mb-1 truncate">{intern.title}</div>
                 <div className="text-[10px] text-indigo-200 truncate">{intern.company}</div>
@@ -1081,7 +835,59 @@ function LandingPage({ onNavigate, onRoleSwitch }: { onNavigate: (v: View) => vo
 
 function FreelancerDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
   const [activeTab, setActiveTab] = useState<"feed" | "matches" | "saved">("feed");
-  const [savedJobs, setSavedJobs] = useState<number[]>(JOBS.filter((j) => j.saved).map((j) => j.id));
+  const [savedJobs, setSavedJobs] = useState<number[]>([]);
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  const { user, setSelectedJobId, refreshUser } = useApp();
+
+  const jobsState = useFetch(async () => {
+    const [feedResponse, saved] = await Promise.all([
+      fit.jobs.list({ search: query || undefined, sort: "newest" }),
+      fit.getToken() ? fit.favorites.list().catch(() => ({ jobs: [] as fit.ApiJob[], services: [], freelancers: [] })) : Promise.resolve({ jobs: [] as fit.ApiJob[], services: [], freelancers: [] }),
+    ]);
+    const savedIds = new Set(saved.jobs.map((job) => job.id));
+    setSavedJobs(Array.from(savedIds));
+    return {
+      feed: feedResponse.data.map((job) => toJobVM(job, savedIds)),
+      saved: saved.jobs.map((job) => toJobVM(job, savedIds)),
+    };
+  }, [query]);
+
+  const statsState = useFetch(async () => {
+    if (!fit.getToken()) return { proposals: 0, active: 0 };
+    const [mine, active] = await Promise.all([
+      fit.proposals.mine().catch(() => null),
+      fit.orders.list({ role: "freelancer", status: "active" }).catch(() => null),
+    ]);
+    return { proposals: mine?.meta.total ?? 0, active: active?.meta.total ?? 0 };
+  }, []);
+
+  useEffect(() => {
+    refreshUser().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggleSave = async (jobId: number, isSaved: boolean) => {
+    setSavedJobs((prev) => (isSaved ? prev.filter((id) => id !== jobId) : [...prev, jobId]));
+    try {
+      if (isSaved) {
+        await fit.favorites.remove("job", jobId);
+      } else {
+        await fit.favorites.save("job", jobId);
+      }
+    } catch {
+      setSavedJobs((prev) => (isSaved ? [...prev, jobId] : prev.filter((id) => id !== jobId)));
+    }
+  };
+
+  const openProposal = (jobId: number) => {
+    setSelectedJobId(jobId);
+    onNavigate("proposal");
+  };
+
+  const profile = user?.freelancer_profile;
+  const connectsBalance = user?.connects_balance ?? 0;
+  const completion = profile?.profile_completion ?? 0;
 
   const tabs = [
     { key: "feed", label: "My Feed" },
@@ -1089,9 +895,13 @@ function FreelancerDashboard({ onNavigate }: { onNavigate: (v: View) => void }) 
     { key: "saved", label: `Saved (${savedJobs.length})` },
   ];
 
-  const displayJobs = activeTab === "saved"
-    ? JOBS.filter((j) => savedJobs.includes(j.id))
-    : JOBS;
+  const feed = jobsState.data?.feed ?? [];
+  const displayJobs =
+    activeTab === "saved"
+      ? jobsState.data?.saved ?? []
+      : activeTab === "matches"
+        ? [...feed].sort((a, b) => a.proposals - b.proposals)
+        : feed;
 
   return (
     <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -1102,13 +912,15 @@ function FreelancerDashboard({ onNavigate }: { onNavigate: (v: View) => void }) 
             {/* Profile Card */}
             <div className="bg-white rounded-2xl border border-border p-5">
               <div className="flex items-center gap-3 mb-4">
-                <Avatar initials="DN" gradient="from-[#0284C7] to-[#06B6D4]" size="lg" />
+                <Avatar initials={user ? initialsOf(user.name) : "FI"} gradient="from-[#0284C7] to-[#06B6D4]" size="lg" />
                 <div>
-                  <div className="font-bold text-sm text-[#0D1117]">Diane Ngono</div>
-                  <div className="text-xs text-slate-500">Senior React Developer</div>
+                  <div className="font-bold text-sm text-[#0D1117]">{user?.name ?? "Guest"}</div>
+                  <div className="text-xs text-slate-500">{profile?.title ?? "Complete your profile"}</div>
                   <div className="flex items-center gap-1 mt-1">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span className="text-xs text-emerald-600 font-medium">Available</span>
+                    <div className={`w-2 h-2 rounded-full ${profile?.availability === "available" ? "bg-emerald-400" : "bg-amber-400"}`} />
+                    <span className={`text-xs font-medium ${profile?.availability === "available" ? "text-emerald-600" : "text-amber-600"}`}>
+                      {profile?.availability === "busy" ? "Busy" : profile?.availability === "unavailable" ? "Unavailable" : "Available"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1116,18 +928,18 @@ function FreelancerDashboard({ onNavigate }: { onNavigate: (v: View) => void }) 
               <div className="mb-4">
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-slate-500">Profile completeness</span>
-                  <span className="font-semibold text-[#0284C7]">87%</span>
+                  <span className="font-semibold text-[#0284C7]">{completion}%</span>
                 </div>
                 <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full bg-gradient-to-r from-[#0284C7] to-[#06B6D4]" style={{ width: "87%" }} />
+                  <div className="h-full rounded-full bg-gradient-to-r from-[#0284C7] to-[#06B6D4]" style={{ width: `${completion}%` }} />
                 </div>
-                <p className="text-xs text-slate-400 mt-1.5">Add a portfolio item to reach 100%</p>
+                {completion < 100 && <p className="text-xs text-slate-400 mt-1.5">Add skills and portfolio items to reach 100%</p>}
               </div>
               <div className="border-t border-border pt-4 grid grid-cols-3 gap-2 text-center">
                 {[
-                  { label: "Proposals", value: "6" },
-                  { label: "Connects", value: "42" },
-                  { label: "Active", value: "2" },
+                  { label: "Proposals", value: String(statsState.data?.proposals ?? "—") },
+                  { label: "Connects", value: String(connectsBalance) },
+                  { label: "Active", value: String(statsState.data?.active ?? "—") },
                 ].map((stat) => (
                   <div key={stat.label}>
                     <div className="text-lg font-extrabold text-[#0D1117]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{stat.value}</div>
@@ -1143,8 +955,8 @@ function FreelancerDashboard({ onNavigate }: { onNavigate: (v: View) => void }) 
                 <span className="text-sm font-semibold text-slate-300">Connects Balance</span>
                 <Wallet size={16} className="text-cyan-400" />
               </div>
-              <div className="text-3xl font-extrabold text-white mb-1" style={{ fontFamily: "'JetBrains Mono', monospace" }}>42</div>
-              <div className="text-xs text-slate-500 mb-4">~7 proposals remaining</div>
+              <div className="text-3xl font-extrabold text-white mb-1" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{connectsBalance}</div>
+              <div className="text-xs text-slate-500 mb-4">~{Math.floor(connectsBalance / 6)} proposals remaining</div>
               <button onClick={() => onNavigate("buy-connects")} className="w-full py-2 rounded-lg bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white text-sm font-semibold hover:opacity-90 transition-opacity">
                 Buy Connects
               </button>
@@ -1177,11 +989,17 @@ function FreelancerDashboard({ onNavigate }: { onNavigate: (v: View) => void }) 
             <div className="bg-white rounded-2xl border border-border p-4 mb-4 flex gap-3">
               <div className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-slate-50 rounded-xl border border-border">
                 <Search size={16} className="text-slate-400 flex-shrink-0" />
-                <input placeholder="Search jobs, skills, keywords..." className="flex-1 bg-transparent text-sm outline-none text-slate-700 placeholder:text-slate-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") setQuery(search); }}
+                  placeholder="Search jobs, skills, keywords..."
+                  className="flex-1 bg-transparent text-sm outline-none text-slate-700 placeholder:text-slate-400"
+                />
               </div>
-              <button className="flex items-center gap-2 px-4 py-2.5 border border-border rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
-                <Filter size={14} />
-                Filters
+              <button onClick={() => setQuery(search)} className="flex items-center gap-2 px-4 py-2.5 border border-border rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                <Search size={14} />
+                Search
               </button>
             </div>
 
@@ -1200,13 +1018,17 @@ function FreelancerDashboard({ onNavigate }: { onNavigate: (v: View) => void }) 
 
             {/* Job Cards */}
             <div className="space-y-4">
-              {displayJobs.length === 0 && (
+              {jobsState.loading && <LoadingBlock label="Loading jobs…" />}
+              {jobsState.error && <ErrorBlock message={jobsState.error} onRetry={jobsState.reload} />}
+              {!jobsState.loading && !jobsState.error && displayJobs.length === 0 && (
                 <div className="bg-white rounded-2xl border border-border p-10 text-center">
                   <Bookmark size={32} className="text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500 text-sm">No saved jobs yet. Bookmark jobs to see them here.</p>
+                  <p className="text-slate-500 text-sm">
+                    {activeTab === "saved" ? "No saved jobs yet. Bookmark jobs to see them here." : "No jobs match your search yet."}
+                  </p>
                 </div>
               )}
-              {displayJobs.map((job) => {
+              {!jobsState.loading && !jobsState.error && displayJobs.map((job) => {
                 const isSaved = savedJobs.includes(job.id);
                 return (
                   <div
@@ -1226,14 +1048,14 @@ function FreelancerDashboard({ onNavigate }: { onNavigate: (v: View) => void }) 
                           )}
                         </div>
                         <button
-                          onClick={() => onNavigate("proposal")}
+                          onClick={() => openProposal(job.id)}
                           className="text-base font-bold text-[#0D1117] hover:text-[#0284C7] transition-colors text-left leading-snug"
                         >
                           {job.title}
                         </button>
                       </div>
                       <button
-                        onClick={() => setSavedJobs((prev) => isSaved ? prev.filter((id) => id !== job.id) : [...prev, job.id])}
+                        onClick={() => toggleSave(job.id, isSaved)}
                         className="p-2 rounded-lg hover:bg-slate-100 transition-colors flex-shrink-0"
                       >
                         {isSaved ? <BookmarkCheck size={16} className="text-[#0284C7]" /> : <Bookmark size={16} className="text-slate-400" />}
@@ -1264,7 +1086,7 @@ function FreelancerDashboard({ onNavigate }: { onNavigate: (v: View) => void }) 
                         </div>
                         <span className="text-xs text-slate-400">{job.posted}</span>
                         <button
-                          onClick={() => onNavigate("proposal")}
+                          onClick={() => openProposal(job.id)}
                           className="px-4 py-2 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity"
                         >
                           Apply Now
@@ -1285,17 +1107,70 @@ function FreelancerDashboard({ onNavigate }: { onNavigate: (v: View) => void }) 
 // ─── PROPOSAL PAGE ───────────────────────────────────────────────────────────
 
 function ProposalPage({ onNavigate }: { onNavigate: (v: View) => void }) {
-  const job = JOBS[0];
-  const [bidRate, setBidRate] = useState("30");
+  const { user, selectedJobId, refreshUser } = useApp();
+  const [bidRate, setBidRate] = useState("");
+  const [deliveryDays, setDeliveryDays] = useState("14");
   const [coverLetter, setCoverLetter] = useState("");
-  const [milestones, setMilestones] = useState([
-    { id: 1, name: "Design & Prototype", amount: "600", dueDate: "2 weeks" },
-    { id: 2, name: "Frontend Development", amount: "900", dueDate: "5 weeks" },
-    { id: 3, name: "Backend & Integration", amount: "700", dueDate: "4 weeks" },
+  const [milestones, setMilestones] = useState<{ id: number; name: string; amount: string; dueDate: string }[]>([
+    { id: 1, name: "", amount: "", dueDate: "" },
   ]);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState<{ connectsSpent: number; balance: number } | null>(null);
+
+  const jobState = useFetch(async () => {
+    if (selectedJobId) return toJobVM(unwrap(await fit.jobs.get(selectedJobId)));
+    const feed = await fit.jobs.list({ sort: "newest" });
+    return feed.data.length ? toJobVM(feed.data[0]) : null;
+  }, [selectedJobId]);
 
   const totalBid = milestones.reduce((sum, m) => sum + (parseFloat(m.amount) || 0), 0);
+
+  const handleSubmit = async () => {
+    const job = jobState.data;
+    if (!job) return;
+    setSubmitting(true);
+    setSubmitError(null);
+
+    const filledMilestones = milestones.filter((m) => m.name.trim() && parseFloat(m.amount) > 0);
+    const amount = filledMilestones.length > 0 ? totalBid : parseFloat(bidRate) || 0;
+
+    try {
+      const result = await fit.proposals.submit(job.id, {
+        amount,
+        delivery_days: Math.max(1, parseInt(deliveryDays, 10) || 14),
+        cover_letter: coverLetter,
+        milestones: filledMilestones.length
+          ? filledMilestones.map((m) => ({ title: m.name, amount: parseFloat(m.amount), due_label: m.dueDate || undefined }))
+          : undefined,
+      });
+      setSubmitted({ connectsSpent: result.connects_spent, balance: result.connects_balance });
+      refreshUser().catch(() => {});
+    } catch (err) {
+      setSubmitError(err instanceof ApiError ? err.firstError : "Could not submit the proposal.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (jobState.loading) {
+    return <div className="min-h-screen bg-background"><LoadingBlock label="Loading job…" /></div>;
+  }
+
+  if (jobState.error || !jobState.data) {
+    return (
+      <div className="min-h-screen bg-background">
+        <ErrorBlock message={jobState.error ?? "Job not found."} onRetry={jobState.reload} />
+      </div>
+    );
+  }
+
+  const job = jobState.data;
+  const currencySymbol = job.budget.currency === "USD" ? "$" : "XAF ";
+  const budgetLabel =
+    job.type === "hourly"
+      ? `${currencySymbol}${job.budget.min ?? 0}–${currencySymbol}${job.budget.max ?? 0}/hr`
+      : formatMoney(job.budget.amount ?? job.budget.max ?? 0, job.budget.currency);
 
   if (submitted) {
     return (
@@ -1305,7 +1180,9 @@ function ProposalPage({ onNavigate }: { onNavigate: (v: View) => void }) {
             <CheckCircle2 size={32} className="text-emerald-600" />
           </div>
           <h2 className="text-2xl font-extrabold text-[#0D1117] mb-2">Proposal Sent!</h2>
-          <p className="text-slate-500 text-sm mb-6">Your proposal has been submitted to {job.client.name}. You used 6 Connects.</p>
+          <p className="text-slate-500 text-sm mb-6">
+            Your proposal has been submitted to {job.client.name}. You used {submitted.connectsSpent} Connects — {submitted.balance} remaining.
+          </p>
           <button onClick={() => onNavigate("freelancer")} className="px-6 py-3 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white font-semibold rounded-xl hover:opacity-90 transition-opacity">
             Back to Job Feed
           </button>
@@ -1327,14 +1204,14 @@ function ProposalPage({ onNavigate }: { onNavigate: (v: View) => void }) {
             <div className="bg-white rounded-2xl border border-border p-5 sticky top-24">
               <div className="flex gap-2 mb-3">
                 <Badge variant={job.type === "hourly" ? "blue" : "cyan"}>{job.type === "hourly" ? "Hourly" : "Fixed Price"}</Badge>
-                <Badge variant="success"><ShieldCheck size={10} /> Payment Verified</Badge>
+                {job.client.paymentVerified && <Badge variant="success"><ShieldCheck size={10} /> Payment Verified</Badge>}
               </div>
               <h2 className="text-base font-bold text-[#0D1117] mb-3 leading-snug">{job.title}</h2>
               <p className="text-sm text-slate-500 leading-relaxed mb-4">{job.description}</p>
 
               <div className="grid grid-cols-2 gap-3 mb-4">
                 {[
-                  { label: "Budget", value: `$${job.budget.min}–$${job.budget.max}/hr` },
+                  { label: "Budget", value: budgetLabel },
                   { label: "Duration", value: job.duration },
                   { label: "Experience", value: job.level },
                   { label: "Proposals", value: `${job.proposals} sent` },
@@ -1373,31 +1250,42 @@ function ProposalPage({ onNavigate }: { onNavigate: (v: View) => void }) {
           {/* Proposal Form */}
           <div className="flex-1 space-y-5">
             <div className="bg-white rounded-2xl border border-border p-6">
-              <h3 className="font-bold text-[#0D1117] mb-1">Your Bid Rate</h3>
-              <p className="text-xs text-slate-500 mb-4">The client's budget is ${job.budget.min}–${job.budget.max}/hr</p>
+              <h3 className="font-bold text-[#0D1117] mb-1">Your Bid</h3>
+              <p className="text-xs text-slate-500 mb-4">The client's budget is {budgetLabel}</p>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Your Rate (USD/hr)</label>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Bid ({job.budget.currency})</label>
                   <div className="flex items-center gap-2 mt-2 px-4 py-3 border border-border rounded-xl bg-slate-50 focus-within:border-[#0284C7] focus-within:bg-white transition-colors">
-                    <span className="text-slate-400 font-mono">$</span>
+                    <span className="text-slate-400 font-mono">{currencySymbol}</span>
                     <input
                       type="number"
-                      value={bidRate}
+                      value={totalBid > 0 ? String(totalBid) : bidRate}
+                      disabled={totalBid > 0}
                       onChange={(e) => setBidRate(e.target.value)}
+                      placeholder="0"
+                      className="flex-1 bg-transparent outline-none text-lg font-bold text-[#0D1117] disabled:text-slate-400"
+                      style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                    />
+                  </div>
+                  {totalBid > 0 && <p className="text-[11px] text-slate-400 mt-1">Computed from your milestones below.</p>}
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Delivery Time (days)</label>
+                  <div className="flex items-center gap-2 mt-2 px-4 py-3 border border-border rounded-xl bg-slate-50 focus-within:border-[#0284C7] focus-within:bg-white transition-colors">
+                    <Clock size={15} className="text-slate-400" />
+                    <input
+                      type="number"
+                      min={1}
+                      value={deliveryDays}
+                      onChange={(e) => setDeliveryDays(e.target.value)}
                       className="flex-1 bg-transparent outline-none text-lg font-bold text-[#0D1117]"
                       style={{ fontFamily: "'JetBrains Mono', monospace" }}
                     />
-                    <span className="text-slate-400 text-sm">/ hr</span>
+                    <span className="text-slate-400 text-sm">days</span>
                   </div>
-                </div>
-                <div className="flex-1">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">You'll Receive</label>
-                  <div className="mt-2 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-                    <div className="text-lg font-bold text-emerald-700" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                      ${(parseFloat(bidRate) * 0.8).toFixed(2)}/hr
-                    </div>
-                    <div className="text-xs text-emerald-600">After 20% FIT service fee</div>
-                  </div>
+                  <p className="text-[11px] text-emerald-600 mt-1">
+                    You'll receive {formatMoney((totalBid > 0 ? totalBid : parseFloat(bidRate) || 0) * 0.9, job.budget.currency)} after the 10% FIT commission.
+                  </p>
                 </div>
               </div>
             </div>
@@ -1427,7 +1315,7 @@ function ProposalPage({ onNavigate }: { onNavigate: (v: View) => void }) {
                       className="flex-1 bg-transparent text-sm text-[#0D1117] placeholder:text-slate-400 outline-none font-medium"
                     />
                     <div className="flex items-center gap-1 px-3 py-1.5 bg-white border border-border rounded-lg w-28 flex-shrink-0">
-                      <span className="text-slate-400 text-sm">$</span>
+                      <span className="text-slate-400 text-sm">{currencySymbol}</span>
                       <input
                         value={ms.amount}
                         onChange={(e) => setMilestones(milestones.map((m) => m.id === ms.id ? { ...m, amount: e.target.value } : m))}
@@ -1446,7 +1334,7 @@ function ProposalPage({ onNavigate }: { onNavigate: (v: View) => void }) {
               </div>
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
                 <span className="text-sm font-semibold text-slate-600">Total Project Value</span>
-                <span className="text-lg font-extrabold text-[#0D1117]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>${totalBid.toLocaleString()}</span>
+                <span className="text-lg font-extrabold text-[#0D1117]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatMoney(totalBid, job.budget.currency)}</span>
               </div>
             </div>
 
@@ -1471,15 +1359,21 @@ function ProposalPage({ onNavigate }: { onNavigate: (v: View) => void }) {
             </div>
 
             {/* Submit */}
+            {submitError && (
+              <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 font-medium">
+                <AlertCircle size={16} className="flex-shrink-0" /> {submitError}
+              </div>
+            )}
             <div className="bg-white rounded-2xl border border-border p-5 flex items-center justify-between">
               <div className="text-sm text-slate-500">
-                Submitting this proposal will use <span className="font-bold text-[#0D1117]">6 Connects</span>. You have <span className="font-bold text-[#0284C7]">42 remaining</span>.
+                Submitting this proposal will use <span className="font-bold text-[#0D1117]">{job.connectsCost} Connects</span>. You have <span className="font-bold text-[#0284C7]">{user?.connects_balance ?? 0} remaining</span>.
               </div>
               <button
-                onClick={() => setSubmitted(true)}
-                className="px-6 py-3 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white font-bold rounded-xl hover:opacity-90 transition-opacity flex items-center gap-2"
+                onClick={handleSubmit}
+                disabled={submitting || !coverLetter.trim() || (totalBid <= 0 && !(parseFloat(bidRate) > 0))}
+                className="px-6 py-3 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white font-bold rounded-xl hover:opacity-90 transition-opacity flex items-center gap-2 disabled:opacity-50"
               >
-                <Send size={15} />
+                {submitting ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
                 Submit Proposal
               </button>
             </div>
@@ -1493,18 +1387,81 @@ function ProposalPage({ onNavigate }: { onNavigate: (v: View) => void }) {
 // ─── CLIENT DASHBOARD ────────────────────────────────────────────────────────
 
 function ClientDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
+  const { user, refreshUser } = useApp();
+  const [expandedJobId, setExpandedJobId] = useState<number | null>(null);
+  const [jobProposals, setJobProposals] = useState<Record<number, ProposalVM[]>>({});
+  const [proposalsLoading, setProposalsLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const dashState = useFetch(async () => {
+    const [myJobs, myOrders] = await Promise.all([
+      fit.jobs.mine(),
+      fit.orders.list({ role: "client" }),
+    ]);
+    return {
+      jobs: myJobs.data.map((job) => toJobVM(job)),
+      contracts: myOrders.data.map(toContractVM),
+      totalOrders: myOrders.meta.total,
+    };
+  }, []);
+
+  useEffect(() => {
+    refreshUser().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const contracts = dashState.data?.contracts ?? [];
+  const activeJobs = dashState.data?.jobs ?? [];
+  const openContracts = contracts.filter((c) => !["completed", "cancelled"].includes(c.status));
+  const clientProfile = user?.client_profile;
+
   const clientStats = [
-    { label: "Active Jobs", value: "3", icon: Briefcase, color: "text-[#0284C7]", bg: "bg-blue-50" },
-    { label: "Open Contracts", value: "5", icon: FileCheck, color: "text-emerald-600", bg: "bg-emerald-50" },
-    { label: "Total Spent", value: "$12.4K", icon: DollarSign, color: "text-amber-600", bg: "bg-amber-50" },
-    { label: "Freelancers Hired", value: "11", icon: Users, color: "text-violet-600", bg: "bg-violet-50" },
+    { label: "Active Jobs", value: String(activeJobs.filter((j) => ["open", "in_selection"].includes(j.status)).length), icon: Briefcase, color: "text-[#0284C7]", bg: "bg-blue-50" },
+    { label: "Open Contracts", value: String(openContracts.length), icon: FileCheck, color: "text-emerald-600", bg: "bg-emerald-50" },
+    { label: "Total Spent", value: formatMoney(clientProfile?.total_spent ?? 0), icon: DollarSign, color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "Freelancers Hired", value: String(clientProfile?.hires_count ?? 0), icon: Users, color: "text-violet-600", bg: "bg-violet-50" },
   ];
 
-  const activeJobs = [
-    { id: 1, title: "Full-Stack React / Node.js Developer", proposals: 12, status: "active", budget: "$25–45/hr", posted: "June 18, 2025" },
-    { id: 2, title: "Flutter Mobile App Developer", proposals: 5, status: "active", budget: "$20–35/hr", posted: "June 20, 2025" },
-    { id: 3, title: "Brand Identity Designer", proposals: 7, status: "draft", budget: "$850 fixed", posted: "Draft" },
-  ];
+  const escrowHeld = contracts.filter((c) => ["active", "submitted", "revision_requested"].includes(c.status)).reduce((sum, c) => sum + c.totalAmount, 0);
+  const released = contracts.filter((c) => c.status === "completed").reduce((sum, c) => sum + c.totalAmount, 0);
+  const pendingReview = contracts.filter((c) => c.status === "submitted").reduce((sum, c) => sum + c.totalAmount, 0);
+  const spendMax = Math.max(escrowHeld, released, pendingReview, 1);
+
+  const toggleProposals = async (jobId: number) => {
+    if (expandedJobId === jobId) {
+      setExpandedJobId(null);
+      return;
+    }
+    setExpandedJobId(jobId);
+    if (!jobProposals[jobId]) {
+      setProposalsLoading(true);
+      try {
+        const response = await fit.proposals.forJob(jobId);
+        setJobProposals((prev) => ({ ...prev, [jobId]: response.data.map(toProposalVM) }));
+      } catch (err) {
+        setActionError(err instanceof ApiError ? err.firstError : "Could not load proposals.");
+      } finally {
+        setProposalsLoading(false);
+      }
+    }
+  };
+
+  const actOnProposal = async (proposal: ProposalVM, action: "accept" | "decline") => {
+    setActionError(null);
+    try {
+      if (action === "accept") {
+        await fit.proposals.accept(proposal.id);
+        onNavigate("contracts");
+      } else {
+        await fit.proposals.decline(proposal.id);
+      }
+      const response = await fit.proposals.forJob(proposal.jobId);
+      setJobProposals((prev) => ({ ...prev, [proposal.jobId]: response.data.map(toProposalVM) }));
+      dashState.reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.firstError : "Action failed.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -1513,7 +1470,7 @@ function ClientDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-extrabold text-[#0D1117] tracking-tight">Client Dashboard</h1>
-            <p className="text-slate-500 text-sm mt-0.5">Afrikart Commerce · Nairobi, Kenya</p>
+            <p className="text-slate-500 text-sm mt-0.5">{clientProfile?.company_name ?? user?.name ?? "Your workspace"}{user?.city ? ` · ${user.city.name}, Cameroon` : ""}</p>
           </div>
           <button
             onClick={() => onNavigate("wizard")}
@@ -1550,43 +1507,88 @@ function ClientDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
                 </button>
               </div>
               <div className="divide-y divide-border">
+                {dashState.loading && <LoadingBlock label="Loading your jobs…" />}
+                {dashState.error && <ErrorBlock message={dashState.error} onRetry={dashState.reload} />}
+                {!dashState.loading && !dashState.error && activeJobs.length === 0 && (
+                  <EmptyBlock message="No jobs yet — post your first one." />
+                )}
                 {activeJobs.map((job) => (
                   <div key={job.id} className="px-6 py-4 hover:bg-slate-50/50 transition-colors">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${job.status === "active" ? "bg-emerald-400" : "bg-amber-400"}`} />
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${["open", "in_selection"].includes(job.status) ? "bg-emerald-400" : job.status === "contracted" ? "bg-blue-400" : "bg-amber-400"}`} />
                           <span className="font-semibold text-sm text-[#0D1117] truncate">{job.title}</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                          <span style={{ fontFamily: "'JetBrains Mono', monospace" }} className="font-medium text-[#0D1117]">{job.budget}</span>
+                          <span style={{ fontFamily: "'JetBrains Mono', monospace" }} className="font-medium text-[#0D1117]">
+                            {job.type === "hourly" ? `${job.budget.min ?? 0}–${job.budget.max ?? 0}/hr` : formatMoney(job.budget.amount, job.budget.currency)}
+                          </span>
                           <span>{job.proposals} proposals</span>
                           <span>Posted {job.posted}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <Badge variant={job.status === "active" ? "success" : "warning"}>
-                          {job.status === "active" ? "Live" : "Draft"}
+                        <Badge variant={["open", "in_selection"].includes(job.status) ? "success" : job.status === "contracted" ? "blue" : "warning"}>
+                          {job.status === "open" ? "Live" : job.status === "in_selection" ? "Reviewing" : job.status === "contracted" ? "Hired" : job.status === "draft" ? "Draft" : job.status}
                         </Badge>
-                        <button className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
-                          <MoreHorizontal size={14} className="text-slate-400" />
-                        </button>
                       </div>
                     </div>
-                    {job.status === "active" && (
+                    {["open", "in_selection"].includes(job.status) && (
                       <div className="flex gap-2 mt-3">
-                        <button onClick={() => onNavigate("talent")} className="px-3 py-1.5 bg-blue-50 text-[#0284C7] text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors">
-                          View {job.proposals} Proposals
+                        <button onClick={() => toggleProposals(job.id)} className="px-3 py-1.5 bg-blue-50 text-[#0284C7] text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors">
+                          {expandedJobId === job.id ? "Hide Proposals" : `View ${job.proposals} Proposals`}
                         </button>
-                        <button onClick={() => onNavigate("talent")} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-semibold rounded-lg hover:bg-slate-200 transition-colors">
-                          Find Talent
+                        <button onClick={() => fit.jobs.close(job.id).then(dashState.reload)} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-semibold rounded-lg hover:bg-slate-200 transition-colors">
+                          Close Job
                         </button>
                       </div>
                     )}
                     {job.status === "draft" && (
-                      <button onClick={() => onNavigate("wizard")} className="mt-3 px-3 py-1.5 bg-amber-50 text-amber-700 text-xs font-semibold rounded-lg hover:bg-amber-100 transition-colors">
-                        Continue Editing
+                      <button onClick={() => fit.jobs.publish(job.id).then(dashState.reload)} className="mt-3 px-3 py-1.5 bg-amber-50 text-amber-700 text-xs font-semibold rounded-lg hover:bg-amber-100 transition-colors">
+                        Publish Job
                       </button>
+                    )}
+                    {expandedJobId === job.id && (
+                      <div className="mt-3 space-y-2">
+                        {proposalsLoading && <div className="text-xs text-slate-400 py-2">Loading proposals…</div>}
+                        {actionError && <div className="text-xs text-red-500 py-1">{actionError}</div>}
+                        {(jobProposals[job.id] ?? []).length === 0 && !proposalsLoading && (
+                          <div className="text-xs text-slate-400 py-2">No proposals yet.</div>
+                        )}
+                        {(jobProposals[job.id] ?? []).map((proposal) => (
+                          <div key={proposal.id} className="p-3 bg-slate-50 rounded-xl border border-border">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Avatar initials={initialsOf(proposal.freelancerName)} gradient={gradientFor(proposal.freelancerId)} size="sm" />
+                                <div className="min-w-0">
+                                  <div className="text-xs font-bold text-[#0D1117] truncate">{proposal.freelancerName}</div>
+                                  <div className="text-[11px] text-slate-500">
+                                    {formatMoney(proposal.amount, proposal.currency)} · {proposal.deliveryDays} days · {proposal.submitted}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {proposal.status === "accepted" ? (
+                                  <Badge variant="success">Accepted</Badge>
+                                ) : proposal.status === "declined" ? (
+                                  <Badge variant="danger">Declined</Badge>
+                                ) : (
+                                  <>
+                                    <button onClick={() => actOnProposal(proposal, "accept")} className="px-2.5 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded-lg hover:opacity-90">
+                                      Accept & Hire
+                                    </button>
+                                    <button onClick={() => actOnProposal(proposal, "decline")} className="px-2.5 py-1.5 bg-white border border-border text-slate-500 text-[11px] font-bold rounded-lg hover:bg-slate-100">
+                                      Decline
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            {proposal.coverLetter && <p className="text-[11px] text-slate-500 mt-2 line-clamp-2">{proposal.coverLetter}</p>}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 ))}
@@ -1599,7 +1601,10 @@ function ClientDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
                 <h2 className="font-bold text-[#0D1117]">Open Contracts</h2>
                 <button onClick={() => onNavigate("contracts")} className="text-xs text-[#0284C7] font-semibold flex items-center gap-1">View all <ChevronRight size={12} /></button>
               </div>
-              {CONTRACTS.map((c) => (
+              {openContracts.length === 0 && !dashState.loading && (
+                <div className="px-6 py-6 text-xs text-slate-400">No open contracts yet.</div>
+              )}
+              {openContracts.slice(0, 4).map((c) => (
                 <div key={c.id} className="px-6 py-4 border-b border-border last:border-b-0 hover:bg-slate-50/50 transition-colors">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1607,8 +1612,8 @@ function ClientDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
                       <div className="text-xs text-slate-500 mt-0.5">with {c.freelancer}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-extrabold text-sm text-[#0D1117]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{c.currency} {c.totalAmount.toLocaleString()}</div>
-                      <Badge variant={c.status === "active" ? "success" : "default"}>{c.status}</Badge>
+                      <div className="font-extrabold text-sm text-[#0D1117]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatMoney(c.totalAmount, c.currency)}</div>
+                      <Badge variant={c.status === "active" ? "success" : c.status === "pending_payment" ? "warning" : "default"}>{c.status.replace(/_/g, " ")}</Badge>
                     </div>
                   </div>
                 </div>
@@ -1647,9 +1652,9 @@ function ClientDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
                 <BarChart2 size={16} className="text-cyan-400" />
               </div>
               {[
-                { label: "Escrow Held", value: "$2,300", bar: 60 },
-                { label: "Released", value: "$800", bar: 30 },
-                { label: "Pending Review", value: "$1,200", bar: 40 },
+                { label: "Escrow Held", value: formatMoney(escrowHeld), bar: Math.round((escrowHeld / spendMax) * 100) },
+                { label: "Released", value: formatMoney(released), bar: Math.round((released / spendMax) * 100) },
+                { label: "Pending Review", value: formatMoney(pendingReview), bar: Math.round((pendingReview / spendMax) * 100) },
               ].map((item) => (
                 <div key={item.label} className="mb-3">
                   <div className="flex justify-between text-xs mb-1">
@@ -1673,17 +1678,65 @@ function ClientDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
 
 function TalentSearch({ onNavigate }: { onNavigate: (v: View) => void }) {
   const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [inviteModal, setInviteModal] = useState<number | null>(null);
-  const [rateMax, setRateMax] = useState(50);
+  const [query, setQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [inviteModal, setInviteModal] = useState<FreelancerVM | null>(null);
+  const [inviteJobId, setInviteJobId] = useState<number | null>(null);
+  const [inviteSending, setInviteSending] = useState(false);
+  const [rateMax, setRateMax] = useState(100);
+  const [sort, setSort] = useState<"rating" | "jss" | "rate_asc">("rating");
+  const { user, setOpenConversationId } = useApp();
 
-  const categories = ["All", "Development", "Design", "Writing", "Data", "Marketing"];
+  // Debounced keyword search.
+  useEffect(() => {
+    const timeout = setTimeout(() => setQuery(search), 400);
+    return () => clearTimeout(timeout);
+  }, [search]);
 
-  const filtered = FREELANCERS.filter((f) => {
-    const matchSearch = search === "" || f.name.toLowerCase().includes(search.toLowerCase()) || f.title.toLowerCase().includes(search.toLowerCase()) || f.skills.some((s) => s.toLowerCase().includes(search.toLowerCase()));
-    const matchRate = f.hourlyRate <= rateMax;
-    return matchSearch && matchRate;
-  });
+  const categoriesState = useFetch(async () => (await fit.meta.categories()).data, []);
+
+  const talentState = useFetch(async () => {
+    const response = await fit.freelancers.search({
+      search: query || undefined,
+      category_id: selectedCategory ?? undefined,
+      max_rate: rateMax < 100 ? rateMax : undefined,
+      sort,
+    });
+    return response.data.map(toFreelancerVM);
+  }, [query, selectedCategory, rateMax, sort]);
+
+  const myJobsState = useFetch(async () => {
+    if (!fit.getToken()) return [] as JobVM[];
+    const response = await fit.jobs.mine("open").catch(() => null);
+    return (response?.data ?? []).map((job) => toJobVM(job));
+  }, []);
+
+  const filtered = talentState.data ?? [];
+
+  const startChat = async (freelancer: FreelancerVM, jobId?: number, inviteText?: string) => {
+    if (!user) {
+      onNavigate("login");
+      return;
+    }
+    const conversation = unwrap(await fit.messaging.start(freelancer.userId, jobId ? { job_post_id: jobId } : {}));
+    if (inviteText) {
+      await fit.messaging.send(conversation.id, inviteText);
+    }
+    setOpenConversationId(conversation.id);
+    onNavigate("messages");
+  };
+
+  const sendInvite = async () => {
+    if (!inviteModal || !inviteJobId) return;
+    setInviteSending(true);
+    try {
+      const job = myJobsState.data?.find((j) => j.id === inviteJobId);
+      await startChat(inviteModal, inviteJobId, `Hi ${inviteModal.name.split(" ")[0]} — I'd like to invite you to send a proposal for my job "${job?.title ?? "my job"}" on FIT.`);
+      setInviteModal(null);
+    } finally {
+      setInviteSending(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -1705,13 +1758,19 @@ function TalentSearch({ onNavigate }: { onNavigate: (v: View) => void }) {
             />
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0">
-            {categories.map((cat) => (
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className={`px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex-shrink-0 ${selectedCategory === null ? "bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+            >
+              All
+            </button>
+            {(categoriesState.data ?? []).slice(0, 5).map((cat) => (
               <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex-shrink-0 ${selectedCategory === cat ? "bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex-shrink-0 ${selectedCategory === cat.id ? "bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
               >
-                {cat}
+                {cat.name_en}
               </button>
             ))}
           </div>
@@ -1769,15 +1828,23 @@ function TalentSearch({ onNavigate }: { onNavigate: (v: View) => void }) {
           <div className="flex-1">
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm text-slate-500">{filtered.length} freelancers found</span>
-              <select className="text-sm border border-border rounded-lg px-3 py-1.5 bg-white text-slate-600 outline-none">
-                <option>Sort: Best Match</option>
-                <option>Highest JSS</option>
-                <option>Lowest Rate</option>
-                <option>Most Reviews</option>
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as typeof sort)}
+                className="text-sm border border-border rounded-lg px-3 py-1.5 bg-white text-slate-600 outline-none"
+              >
+                <option value="rating">Sort: Best Rated</option>
+                <option value="jss">Highest JSS</option>
+                <option value="rate_asc">Lowest Rate</option>
               </select>
             </div>
+            {talentState.loading && <LoadingBlock label="Searching talent…" />}
+            {talentState.error && <ErrorBlock message={talentState.error} onRetry={talentState.reload} />}
+            {!talentState.loading && !talentState.error && filtered.length === 0 && (
+              <EmptyBlock message="No freelancers match your filters yet." />
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filtered.map((f) => (
+              {!talentState.loading && filtered.map((f) => (
                 <div key={f.id} className="bg-white rounded-2xl border border-border p-5 hover:shadow-md hover:border-[#0284C7]/30 transition-all">
                   <div className="flex items-start gap-3 mb-4">
                     <div className="relative">
@@ -1820,10 +1887,10 @@ function TalentSearch({ onNavigate }: { onNavigate: (v: View) => void }) {
                   <div className="flex items-center justify-between pt-3 border-t border-border">
                     <span className="text-xs text-slate-400 font-mono" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{f.totalEarnings} earned</span>
                     <div className="flex gap-2">
-                      <button onClick={() => onNavigate("messages")} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-semibold rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1">
+                      <button onClick={() => startChat(f).catch(() => {})} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-semibold rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1">
                         <MessageSquare size={11} /> Message
                       </button>
-                      <button onClick={() => setInviteModal(f.id)} className="px-3 py-1.5 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity">
+                      <button onClick={() => { setInviteModal(f); setInviteJobId(null); }} className="px-3 py-1.5 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity">
                         Invite to Job
                       </button>
                     </div>
@@ -1846,18 +1913,25 @@ function TalentSearch({ onNavigate }: { onNavigate: (v: View) => void }) {
               </button>
             </div>
             <p className="text-sm text-slate-500 mb-4">
-              Select which job to invite <strong>{FREELANCERS.find((f) => f.id === inviteModal)?.name}</strong> to:
+              Select which job to invite <strong>{inviteModal.name}</strong> to:
             </p>
             <div className="space-y-2 mb-5">
-              {["Full-Stack React / Node.js Developer", "Flutter Mobile App Developer"].map((j) => (
-                <label key={j} className="flex items-center gap-3 p-3 border border-border rounded-xl cursor-pointer hover:border-[#0284C7] transition-colors">
-                  <input type="radio" name="inviteJob" className="accent-[#0284C7]" />
-                  <span className="text-sm text-slate-700 font-medium">{j}</span>
+              {(myJobsState.data ?? []).length === 0 && (
+                <p className="text-xs text-slate-400">You have no open jobs. Post one first from the Job Wizard.</p>
+              )}
+              {(myJobsState.data ?? []).map((j) => (
+                <label key={j.id} className="flex items-center gap-3 p-3 border border-border rounded-xl cursor-pointer hover:border-[#0284C7] transition-colors">
+                  <input type="radio" name="inviteJob" checked={inviteJobId === j.id} onChange={() => setInviteJobId(j.id)} className="accent-[#0284C7]" />
+                  <span className="text-sm text-slate-700 font-medium">{j.title}</span>
                 </label>
               ))}
             </div>
-            <button onClick={() => setInviteModal(null)} className="w-full py-3 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white font-semibold rounded-xl hover:opacity-90 transition-opacity text-sm">
-              Send Invitation
+            <button
+              onClick={sendInvite}
+              disabled={!inviteJobId || inviteSending}
+              className="w-full py-3 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white font-semibold rounded-xl hover:opacity-90 transition-opacity text-sm disabled:opacity-50"
+            >
+              {inviteSending ? "Sending…" : "Send Invitation"}
             </button>
           </div>
         </div>
@@ -1868,12 +1942,11 @@ function TalentSearch({ onNavigate }: { onNavigate: (v: View) => void }) {
 
 // ─── JOB POST WIZARD ─────────────────────────────────────────────────────────
 
-const WIZARD_SKILLS = ["React", "Node.js", "TypeScript", "Python", "Flutter", "Figma", "Adobe XD", "PostgreSQL", "MongoDB", "AWS", "Docker", "GraphQL", "Vue.js", "Django", "Next.js", "Swift", "Kotlin", "Firebase", "SEO", "Content Writing", "French", "English", "Excel", "Zendesk"];
-
 function JobWizard({ onNavigate }: { onNavigate: (v: View) => void }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
     title: "",
+    categoryId: null as number | null,
     category: "",
     description: "",
     skills: [] as string[],
@@ -1883,10 +1956,15 @@ function JobWizard({ onNavigate }: { onNavigate: (v: View) => void }) {
     fixedAmount: "",
     hourlyMin: "",
     hourlyMax: "",
-    currency: "USD",
-    milestones: [{ id: 1, name: "", amount: "" }],
+    currency: "XAF",
   });
   const [published, setPublished] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [contactWarning, setContactWarning] = useState<string | null>(null);
+
+  const categoriesState = useFetch(async () => (await fit.meta.categories()).data, []);
+  const skillsState = useFetch(async () => (await fit.meta.skills()).data, []);
 
   const steps = [
     { num: 1, label: "Title & Category" },
@@ -1896,10 +1974,42 @@ function JobWizard({ onNavigate }: { onNavigate: (v: View) => void }) {
   ];
 
   const canProceed = (s: number) => {
-    if (s === 1) return form.title.length > 5 && form.category !== "";
+    if (s === 1) return form.title.length > 5 && form.categoryId !== null;
     if (s === 2) return form.skills.length > 0;
     if (s === 3) return form.duration !== "" && form.level !== "";
     return true;
+  };
+
+  const handlePublish = async () => {
+    if (!form.categoryId) return;
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const skillIds = (skillsState.data ?? [])
+        .filter((skill) => form.skills.includes(skill.name))
+        .map((skill) => skill.id);
+
+      const result = await fit.jobs.create({
+        title: form.title,
+        description: form.description || form.title,
+        category_id: form.categoryId,
+        budget_type: form.budgetType,
+        budget_min: form.budgetType === "fixed" ? parseFloat(form.fixedAmount) || 0 : parseFloat(form.hourlyMin) || 0,
+        budget_max: form.budgetType === "fixed" ? parseFloat(form.fixedAmount) || 0 : parseFloat(form.hourlyMax) || 0,
+        currency: form.currency,
+        duration: form.duration,
+        experience_level: form.level.toLowerCase(),
+        mode: "remote",
+        skill_ids: skillIds,
+        publish: true,
+      });
+      setContactWarning(result.contact_warning);
+      setPublished(true);
+    } catch (err) {
+      setPublishError(err instanceof ApiError ? err.firstError : "Could not publish the job.");
+    } finally {
+      setPublishing(false);
+    }
   };
 
   if (published) {
@@ -1911,6 +2021,9 @@ function JobWizard({ onNavigate }: { onNavigate: (v: View) => void }) {
           </div>
           <h2 className="text-2xl font-extrabold text-[#0D1117] mb-2">Job Posted!</h2>
           <p className="text-slate-500 text-sm mb-6">Your job is live. Freelancers can now submit proposals. You'll be notified as they arrive.</p>
+          {contactWarning && (
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6">{contactWarning}</p>
+          )}
           <div className="flex gap-3 justify-center">
             <button onClick={() => onNavigate("client")} className="px-5 py-3 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white font-semibold rounded-xl text-sm hover:opacity-90 transition-opacity">
               Go to Dashboard
@@ -1967,14 +2080,15 @@ function JobWizard({ onNavigate }: { onNavigate: (v: View) => void }) {
               </div>
               <div>
                 <label className="block text-sm font-bold text-[#0D1117] mb-2">Category <span className="text-red-500">*</span></label>
+                {categoriesState.loading && <div className="text-xs text-slate-400 py-2">Loading categories…</div>}
                 <div className="grid grid-cols-2 gap-2">
-                  {["Web Development", "Mobile Development", "Design & Creative", "Writing & Translation", "Data & Analytics", "Admin Support", "Sales & Marketing", "Engineering & IT"].map((cat) => (
+                  {(categoriesState.data ?? []).map((cat) => (
                     <button
-                      key={cat}
-                      onClick={() => setForm({ ...form, category: cat })}
-                      className={`p-3 rounded-xl border text-sm font-medium text-left transition-all ${form.category === cat ? "border-[#0284C7] bg-blue-50 text-[#0284C7]" : "border-border text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}
+                      key={cat.id}
+                      onClick={() => setForm({ ...form, categoryId: cat.id, category: cat.name_en })}
+                      className={`p-3 rounded-xl border text-sm font-medium text-left transition-all ${form.categoryId === cat.id ? "border-[#0284C7] bg-blue-50 text-[#0284C7]" : "border-border text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}
                     >
-                      {cat}
+                      {cat.name_en}
                     </button>
                   ))}
                 </div>
@@ -1997,12 +2111,14 @@ function JobWizard({ onNavigate }: { onNavigate: (v: View) => void }) {
               <div>
                 <label className="block text-sm font-bold text-[#0D1117] mb-1">Required Skills <span className="text-red-500">*</span></label>
                 <p className="text-xs text-slate-400 mb-4">Select all that apply — this helps match you with the right candidates</p>
+                {skillsState.loading && <div className="text-xs text-slate-400 py-2">Loading skills…</div>}
                 <div className="flex flex-wrap gap-2">
-                  {WIZARD_SKILLS.map((skill) => {
+                  {(skillsState.data ?? []).map((apiSkill) => {
+                    const skill = apiSkill.name;
                     const selected = form.skills.includes(skill);
                     return (
                       <button
-                        key={skill}
+                        key={apiSkill.id}
                         onClick={() => setForm({ ...form, skills: selected ? form.skills.filter((s) => s !== skill) : [...form.skills, skill] })}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selected ? "bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
                       >
@@ -2095,7 +2211,7 @@ function JobWizard({ onNavigate }: { onNavigate: (v: View) => void }) {
               <div>
                 <label className="block text-sm font-bold text-[#0D1117] mb-2">Currency</label>
                 <div className="flex gap-2">
-                  {["USD", "XAF", "EUR"].map((cur) => (
+                  {["XAF", "USD"].map((cur) => (
                     <button
                       key={cur}
                       onClick={() => setForm({ ...form, currency: cur })}
@@ -2175,9 +2291,12 @@ function JobWizard({ onNavigate }: { onNavigate: (v: View) => void }) {
               Continue <ChevronRight size={16} />
             </button>
           ) : (
-            <button onClick={() => setPublished(true)} className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white font-bold rounded-xl hover:opacity-90 transition-opacity text-sm">
-              <Zap size={15} /> Publish Job Post
-            </button>
+            <div className="flex flex-col items-end gap-2">
+              {publishError && <span className="text-xs text-red-500 font-medium">{publishError}</span>}
+              <button onClick={handlePublish} disabled={publishing} className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white font-bold rounded-xl hover:opacity-90 transition-opacity text-sm disabled:opacity-60">
+                {publishing ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />} Publish Job Post
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -2187,17 +2306,16 @@ function JobWizard({ onNavigate }: { onNavigate: (v: View) => void }) {
 
 // ─── MESSENGER ───────────────────────────────────────────────────────────────
 
-const THREAD_LIST = [
-  { id: 1, contact: "GreenField AgriTech", initials: "GA", gradient: "from-[#16A34A] to-[#34D399]", lastMessage: "Can we schedule a video call to discuss the milestones?", time: "10:32 AM", unread: 3, type: "contract", online: true },
-  { id: 2, contact: "MTN FinTech Lab", initials: "MF", gradient: "from-[#0284C7] to-[#06B6D4]", lastMessage: "The proposal looks great. We have a few questions about the timeline.", time: "Yesterday", unread: 0, type: "interview", online: false },
-  { id: 3, contact: "TechAfrique Media", initials: "TM", gradient: "from-[#D97706] to-[#FBBF24]", lastMessage: "Please submit the first draft by Friday.", time: "Mon", unread: 0, type: "contract", online: false },
-  { id: 4, contact: "Kwame Asante", initials: "KA", gradient: "from-[#7C3AED] to-[#A78BFA]", lastMessage: "I have reviewed your job post and am very interested.", time: "Sun", unread: 1, type: "interview", online: true },
-];
-
 function MessengerPage() {
-  const [activeThread, setActiveThread] = useState(THREAD_LIST[0]);
+  const { user, openConversationId, setOpenConversationId } = useApp();
+  const myUserId = user?.id ?? 0;
+  const [activeThread, setActiveThread] = useState<ThreadVM | null>(null);
   const [newMessage, setNewMessage] = useState("");
-  const [messages, setMessages] = useState(CHAT_MESSAGES);
+  const [messages, setMessages] = useState<MessageVM[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [contactWarning, setContactWarning] = useState<string | null>(null);
+  const [threadSearch, setThreadSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<"all" | "contract" | "interview">("all");
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(15);
@@ -2206,26 +2324,74 @@ function MessengerPage() {
   const [interviewNote, setInterviewNote] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
+  const threadsState = useFetch(async () => {
+    const response = await fit.messaging.conversations();
+    return response.data.map((conversation) => toThreadVM(conversation, myUserId));
+  }, [myUserId]);
+
+  // Select the requested conversation (e.g. from Talent Search) or the first one.
+  useEffect(() => {
+    const threads = threadsState.data ?? [];
+    if (threads.length === 0) return;
+    const preferred = openConversationId ? threads.find((thread) => thread.id === openConversationId) : null;
+    setActiveThread((current) => preferred ?? current ?? threads[0]);
+    if (preferred) setOpenConversationId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadsState.data]);
+
+  const loadMessages = useCallback(async (conversationId: number, showSpinner: boolean) => {
+    if (showSpinner) setMessagesLoading(true);
+    try {
+      const response = await fit.messaging.messages(conversationId);
+      setMessages(response.data.map((message) => toMessageVM(message, myUserId)).reverse());
+      fit.messaging.markRead(conversationId).catch(() => {});
+    } finally {
+      if (showSpinner) setMessagesLoading(false);
+    }
+  }, [myUserId]);
+
+  // Load messages when a thread opens, then poll for new ones.
+  useEffect(() => {
+    if (!activeThread) return;
+    loadMessages(activeThread.id, true).catch(() => {});
+    const poller = setInterval(() => loadMessages(activeThread.id, false).catch(() => {}), 8000);
+    return () => clearInterval(poller);
+  }, [activeThread?.id, loadMessages]);
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  const handleSend = () => {
-    if (!newMessage.trim()) return;
-    setMessages([...messages, { id: Date.now(), sender: "me", text: newMessage, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
-    setNewMessage("");
+  const sendText = async (text: string) => {
+    if (!activeThread || !text.trim()) return;
+    setSendError(null);
+    try {
+      const result = await fit.messaging.send(activeThread.id, text);
+      setContactWarning(result.contact_warning);
+      const sent = unwrap(result.message) as fit.ApiMessage;
+      setMessages((prev) => [...prev, toMessageVM(sent, myUserId)]);
+    } catch (err) {
+      setSendError(err instanceof ApiError ? err.firstError : "Message failed to send.");
+    }
   };
 
-  const handleScheduleInterview = () => {
-    setMessages([...messages, {
-      id: Date.now(),
-      sender: "me",
-      text: `📅 Video Interview Scheduled\n\n📆 July ${selectedDate}, 2025 at ${selectedTime}\n⏱ Duration: ${selectedDuration}\n📹 Platform: FIT Video\n${interviewNote ? `\n📝 Note: ${interviewNote}` : ""}`,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    }]);
+  const handleSend = async () => {
+    const text = newMessage;
+    setNewMessage("");
+    await sendText(text);
+  };
+
+  const handleScheduleInterview = async () => {
+    await sendText(
+      `📅 Video Interview Scheduled\n\n📆 July ${selectedDate}, 2026 at ${selectedTime}\n⏱ Duration: ${selectedDuration}\n📹 Platform: FIT Video\n${interviewNote ? `\n📝 Note: ${interviewNote}` : ""}`,
+    );
     setShowScheduleModal(false);
     setInterviewNote("");
   };
 
-  const filtered = THREAD_LIST.filter((t) => activeFilter === "all" || t.type === activeFilter);
+  const filtered = (threadsState.data ?? []).filter((thread) => {
+    const matchFilter = activeFilter === "all" || thread.type === activeFilter;
+    const matchSearch = threadSearch === "" || thread.contact.toLowerCase().includes(threadSearch.toLowerCase());
+    return matchFilter && matchSearch;
+  });
 
   return (
     <div className="h-[calc(100vh-64px)] flex overflow-hidden bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -2235,7 +2401,7 @@ function MessengerPage() {
           <h2 className="font-bold text-[#0D1117] mb-3">Messages</h2>
           <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl border border-border">
             <Search size={14} className="text-slate-400" />
-            <input placeholder="Search conversations..." className="flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400" />
+            <input value={threadSearch} onChange={(e) => setThreadSearch(e.target.value)} placeholder="Search conversations..." className="flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400" />
           </div>
           <div className="flex gap-1 mt-3">
             {(["all", "contract", "interview"] as const).map((f) => (
@@ -2250,14 +2416,19 @@ function MessengerPage() {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
+          {threadsState.loading && <LoadingBlock label="Loading conversations…" />}
+          {threadsState.error && <ErrorBlock message={threadsState.error} onRetry={threadsState.reload} />}
+          {!threadsState.loading && !threadsState.error && filtered.length === 0 && (
+            <EmptyBlock message="No conversations yet." />
+          )}
           {filtered.map((thread) => (
             <button
               key={thread.id}
               onClick={() => setActiveThread(thread)}
-              className={`w-full flex items-start gap-3 p-4 border-b border-border hover:bg-slate-50 transition-colors text-left ${activeThread.id === thread.id ? "bg-blue-50/60 border-l-2 border-l-[#0284C7]" : ""}`}
+              className={`w-full flex items-start gap-3 p-4 border-b border-border hover:bg-slate-50 transition-colors text-left ${activeThread?.id === thread.id ? "bg-blue-50/60 border-l-2 border-l-[#0284C7]" : ""}`}
             >
               <div className="relative flex-shrink-0">
-                <Avatar initials={thread.initials} gradient={thread.gradient} size="sm" />
+                <Avatar initials={thread.initials} gradient={thread.color} size="sm" />
                 {thread.online && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 border-2 border-white rounded-full" />}
               </div>
               <div className="flex-1 min-w-0">
@@ -2278,11 +2449,15 @@ function MessengerPage() {
 
       {/* Chat Window */}
       <div className="flex-1 flex flex-col min-w-0">
+        {!activeThread ? (
+          <EmptyBlock message="Select a conversation to start chatting." />
+        ) : (
+        <>
         {/* Chat Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-white">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Avatar initials={activeThread.initials} gradient={activeThread.gradient} size="md" />
+              <Avatar initials={activeThread.initials} gradient={activeThread.color} size="md" />
               {activeThread.online && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 border-2 border-white rounded-full" />}
             </div>
             <div>
@@ -2313,11 +2488,14 @@ function MessengerPage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4 bg-background">
-          <div className="text-center text-xs text-slate-400 font-medium">Today · June 27, 2025</div>
+          {messagesLoading && <LoadingBlock label="Loading messages…" />}
+          {!messagesLoading && messages.length === 0 && (
+            <div className="text-center text-xs text-slate-400 font-medium">No messages yet — say hello 👋</div>
+          )}
           {messages.map((msg) => (
             <div key={msg.id} className={`flex items-end gap-2 ${msg.sender === "me" ? "flex-row-reverse" : ""}`}>
               {msg.sender !== "me" && (
-                <Avatar initials={activeThread.initials} gradient={activeThread.gradient} size="xs" />
+                <Avatar initials={activeThread.initials} gradient={activeThread.color} size="xs" />
               )}
               <div className={`max-w-[70%] ${msg.sender === "me" ? "items-end" : "items-start"} flex flex-col gap-1`}>
                 <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.sender === "me" ? "bg-gradient-to-br from-[#0284C7] to-[#06B6D4] text-white rounded-br-sm" : "bg-white border border-border text-[#0D1117] rounded-bl-sm"}`}>
@@ -2332,6 +2510,17 @@ function MessengerPage() {
 
         {/* Input */}
         <div className="px-6 py-4 border-t border-border bg-white">
+          {contactWarning && (
+            <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-medium">
+              <Shield size={13} className="flex-shrink-0" /> {contactWarning}
+              <button onClick={() => setContactWarning(null)} className="ml-auto"><X size={12} /></button>
+            </div>
+          )}
+          {sendError && (
+            <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 font-medium">
+              <AlertCircle size={13} className="flex-shrink-0" /> {sendError}
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0">
               <Paperclip size={16} className="text-slate-400" />
@@ -2357,10 +2546,12 @@ function MessengerPage() {
             </button>
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* ═══ SCHEDULE INTERVIEW MODAL ═══ */}
-      {showScheduleModal && (
+      {showScheduleModal && activeThread && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowScheduleModal(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
@@ -2465,7 +2656,108 @@ function MessengerPage() {
 // ─── CONTRACTS PAGE ──────────────────────────────────────────────────────────
 
 function ContractsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
-  const [activeContract, setActiveContract] = useState(CONTRACTS[0]);
+  const { user, setOpenConversationId } = useApp();
+  const [activeContract, setActiveContract] = useState<ContractVM | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+
+  const contractsState = useFetch(async () => {
+    const response = await fit.orders.list();
+    return response.data.map(toContractVM);
+  }, []);
+
+  useEffect(() => {
+    const contracts = contractsState.data ?? [];
+    if (contracts.length > 0) {
+      setActiveContract((current) => contracts.find((c) => c.id === current?.id) ?? contracts[0]);
+    } else {
+      setActiveContract(null);
+    }
+  }, [contractsState.data]);
+
+  const isClient = activeContract !== null && user?.id === activeContract.clientId;
+  const isFreelancer = activeContract !== null && user?.id === activeContract.freelancerId;
+
+  // Refresh the selected order with its deliveries so approve/revise can target them.
+  const refreshActive = async (orderId: number) => {
+    const [fresh] = await Promise.all([fit.orders.get(orderId), contractsState.reload()]);
+    setActiveContract(toContractVM(unwrap(fresh)));
+  };
+
+  const runAction = async (label: string, action: () => Promise<unknown>) => {
+    if (!activeContract) return;
+    setActionBusy(true);
+    setActionError(null);
+    setActionNotice(null);
+    try {
+      await action();
+      await refreshActive(activeContract.id);
+      setActionNotice(label);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.firstError : "Action failed.");
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  /** Sandbox payment: initiate then immediately confirm (replaced by the MoMo webhook in production). */
+  const payAndConfirm = async (initiate: () => Promise<{ reference: string }>) => {
+    const payment = await initiate();
+    await fit.payments.confirmSandbox(payment.reference);
+  };
+
+  const submittedDeliveryFor = (milestoneId: number | null) =>
+    (activeContract?.deliveries ?? []).find(
+      (delivery) => delivery.status === "submitted" && (milestoneId === null || delivery.order_milestone_id === milestoneId),
+    );
+
+  const payOrder = () =>
+    runAction("Payment confirmed — funds held in escrow.", () =>
+      payAndConfirm(async () => unwrap((await fit.orders.pay(activeContract!.id, "mtn_momo", user?.phone ?? "237600000000")).payment) as fit.ApiPayment),
+    );
+
+  const fundMilestone = (milestoneId: number) =>
+    runAction("Milestone funded.", () =>
+      payAndConfirm(async () => unwrap(await fit.orders.payMilestone(milestoneId, "mtn_momo", user?.phone ?? "237600000000"))),
+    );
+
+  const approveMilestone = (milestoneId: number | null) => {
+    const delivery = submittedDeliveryFor(milestoneId);
+    if (!delivery) {
+      setActionError("No submitted delivery to approve yet.");
+      return;
+    }
+    runAction("Delivery approved — payment released.", () => fit.orders.approveDelivery(delivery.id));
+  };
+
+  const requestRevision = (milestoneId: number | null) => {
+    const delivery = submittedDeliveryFor(milestoneId);
+    if (!delivery) {
+      setActionError("No submitted delivery to revise.");
+      return;
+    }
+    const feedback = window.prompt("What should be changed? (sent to the freelancer)");
+    if (!feedback) return;
+    runAction("Revision requested.", () => fit.orders.requestRevision(delivery.id, feedback));
+  };
+
+  const submitDelivery = () => {
+    const message = window.prompt("Delivery note for the client (attach files from the mobile app or API):");
+    if (!message) return;
+    const inReviewMilestone = activeContract?.milestones.find((m) => m.status === "funded");
+    runAction("Delivery submitted for review.", () =>
+      fit.orders.deliver(activeContract!.id, { message, milestone_id: inReviewMilestone?.id }),
+    );
+  };
+
+  const messageCounterpart = async () => {
+    if (!activeContract || !user) return;
+    const otherId = user.id === activeContract.clientId ? activeContract.freelancerId : activeContract.clientId;
+    const conversation = unwrap(await fit.messaging.start(otherId, { order_id: activeContract.id }));
+    setOpenConversationId(conversation.id);
+    onNavigate("messages");
+  };
 
   return (
     <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -2484,36 +2776,48 @@ function ContractsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
           {/* Contract List */}
           <div className="space-y-3">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">All Contracts</h2>
-            {CONTRACTS.map((c) => (
+            {contractsState.loading && <LoadingBlock label="Loading contracts…" />}
+            {contractsState.error && <ErrorBlock message={contractsState.error} onRetry={contractsState.reload} />}
+            {!contractsState.loading && !contractsState.error && (contractsState.data ?? []).length === 0 && (
+              <EmptyBlock message="No contracts yet." />
+            )}
+            {(contractsState.data ?? []).map((c) => (
               <button
                 key={c.id}
                 onClick={() => setActiveContract(c)}
-                className={`w-full text-left bg-white rounded-2xl border p-4 transition-all hover:shadow-sm ${activeContract.id === c.id ? "border-[#0284C7] ring-1 ring-[#0284C7]/20" : "border-border"}`}
+                className={`w-full text-left bg-white rounded-2xl border p-4 transition-all hover:shadow-sm ${activeContract?.id === c.id ? "border-[#0284C7] ring-1 ring-[#0284C7]/20" : "border-border"}`}
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="font-semibold text-sm text-[#0D1117] leading-snug flex-1 pr-2">{c.title}</div>
-                  <Badge variant={c.status === "active" ? "success" : "default"}>{c.status}</Badge>
+                  <Badge variant={c.status === "active" ? "success" : c.status === "pending_payment" ? "warning" : c.status === "disputed" ? "danger" : "default"}>{c.status.replace(/_/g, " ")}</Badge>
                 </div>
-                <div className="text-xs text-slate-500 mb-2">with {c.freelancer}</div>
+                <div className="text-xs text-slate-500 mb-2">{c.client} ↔ {c.freelancer}</div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-extrabold text-[#0D1117]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{c.currency} {c.totalAmount.toLocaleString()}</span>
+                  <span className="text-sm font-extrabold text-[#0D1117]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatMoney(c.totalAmount, c.currency)}</span>
                   <span className="text-xs text-slate-400">{c.milestones.length} milestones</span>
                 </div>
-                <div className="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-[#0284C7] to-[#06B6D4]"
-                    style={{ width: `${(c.milestones.filter((m) => m.status === "approved").length / c.milestones.length) * 100}%` }}
-                  />
-                </div>
-                <div className="text-[10px] text-slate-400 mt-1">
-                  {c.milestones.filter((m) => m.status === "approved").length} of {c.milestones.length} milestones approved
-                </div>
+                {c.milestones.length > 0 && (
+                  <>
+                    <div className="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-[#0284C7] to-[#06B6D4]"
+                        style={{ width: `${(c.milestones.filter((m) => m.status === "approved").length / c.milestones.length) * 100}%` }}
+                      />
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1">
+                      {c.milestones.filter((m) => m.status === "approved").length} of {c.milestones.length} milestones approved
+                    </div>
+                  </>
+                )}
               </button>
             ))}
           </div>
 
           {/* Contract Detail */}
           <div className="lg:col-span-2">
+            {!activeContract ? (
+              <div className="bg-white rounded-2xl border border-border"><EmptyBlock message="Select a contract to see its milestones." /></div>
+            ) : (
             <div className="bg-white rounded-2xl border border-border overflow-hidden">
               {/* Contract Header */}
               <div className="p-6 border-b border-border bg-gradient-to-r from-[#0D1117] to-[#1E293B]">
@@ -2526,12 +2830,12 @@ function ContractsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
                       <span className="text-slate-400 text-sm">Freelancer: {activeContract.freelancer}</span>
                     </div>
                   </div>
-                  <Badge variant={activeContract.status === "active" ? "success" : "default"}>{activeContract.status}</Badge>
+                  <Badge variant={activeContract.status === "active" ? "success" : activeContract.status === "pending_payment" ? "warning" : activeContract.status === "disputed" ? "danger" : "default"}>{activeContract.status.replace(/_/g, " ")}</Badge>
                 </div>
                 <div className="flex items-center gap-6">
                   <div>
                     <div className="text-xs text-slate-500">Total Value</div>
-                    <div className="text-xl font-extrabold text-white" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{activeContract.currency} {activeContract.totalAmount.toLocaleString()}</div>
+                    <div className="text-xl font-extrabold text-white" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatMoney(activeContract.totalAmount, activeContract.currency)}</div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">Milestones</div>
@@ -2558,10 +2862,15 @@ function ContractsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {activeContract.milestones.map((ms) => (
+                    {activeContract.milestones.length === 0 && (
+                      <tr><td colSpan={6} className="px-6 py-6 text-center text-xs text-slate-400">
+                        Single-payment contract — no milestones. Use the actions below.
+                      </td></tr>
+                    )}
+                    {activeContract.milestones.map((ms, msIndex) => (
                       <tr key={ms.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4">
-                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0284C7] to-[#06B6D4] flex items-center justify-center text-white text-xs font-bold">{ms.id}</div>
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0284C7] to-[#06B6D4] flex items-center justify-center text-white text-xs font-bold">{msIndex + 1}</div>
                         </td>
                         <td className="px-4 py-4">
                           <div className="font-semibold text-sm text-[#0D1117]">{ms.name}</div>
@@ -2569,7 +2878,7 @@ function ContractsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
                         <td className="px-4 py-4 text-sm text-slate-500">{ms.dueDate}</td>
                         <td className="px-4 py-4 text-right">
                           <span className="font-extrabold text-sm text-[#0D1117]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                            {activeContract.currency} {ms.amount.toLocaleString()}
+                            {formatMoney(ms.amount, activeContract.currency)}
                           </span>
                         </td>
                         <td className="px-4 py-4 text-center">
@@ -2577,28 +2886,37 @@ function ContractsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {ms.status === "in_review" && (
+                            {ms.status === "in_review" && isClient && (
                               <>
-                                <button className="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1">
+                                <button disabled={actionBusy} onClick={() => approveMilestone(ms.id)} className="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1 disabled:opacity-50">
                                   <ThumbsUp size={11} /> Approve
                                 </button>
-                                <button className="px-3 py-1.5 bg-amber-50 text-amber-700 text-xs font-semibold rounded-lg hover:bg-amber-100 transition-colors flex items-center gap-1">
+                                <button disabled={actionBusy} onClick={() => requestRevision(ms.id)} className="px-3 py-1.5 bg-amber-50 text-amber-700 text-xs font-semibold rounded-lg hover:bg-amber-100 transition-colors flex items-center gap-1 disabled:opacity-50">
                                   <RotateCcw size={11} /> Revise
                                 </button>
                               </>
                             )}
-                            {ms.status === "funded" && (
-                              <button className="px-3 py-1.5 bg-blue-50 text-[#0284C7] text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1">
-                                <Eye size={11} /> View Work
+                            {ms.status === "in_review" && isFreelancer && (
+                              <span className="text-xs text-slate-400">Awaiting client review</span>
+                            )}
+                            {ms.status === "funded" && isFreelancer && (
+                              <button disabled={actionBusy} onClick={submitDelivery} className="px-3 py-1.5 bg-blue-50 text-[#0284C7] text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1 disabled:opacity-50">
+                                <Upload size={11} /> Deliver Work
                               </button>
+                            )}
+                            {ms.status === "funded" && isClient && (
+                              <span className="text-xs text-slate-400">In progress</span>
                             )}
                             {ms.status === "approved" && (
                               <span className="text-xs text-slate-400 flex items-center gap-1"><Check size={11} className="text-emerald-500" /> Released</span>
                             )}
-                            {ms.status === "pending" && (
-                              <button className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-semibold rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1">
+                            {ms.status === "pending" && isClient && (
+                              <button disabled={actionBusy} onClick={() => fundMilestone(ms.id)} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-semibold rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1 disabled:opacity-50">
                                 <Wallet size={11} /> Fund Escrow
                               </button>
+                            )}
+                            {ms.status === "pending" && isFreelancer && (
+                              <span className="text-xs text-slate-400">Awaiting funding</span>
                             )}
                           </div>
                         </td>
@@ -2609,22 +2927,70 @@ function ContractsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
               </div>
 
               {/* Contract Footer */}
+              {(actionError || actionNotice) && (
+                <div className={`mx-6 mt-4 px-4 py-3 rounded-xl text-sm font-medium border ${actionError ? "bg-red-50 border-red-200 text-red-600" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`}>
+                  {actionError ?? actionNotice}
+                </div>
+              )}
               <div className="px-6 py-4 border-t border-border bg-slate-50/50 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <button onClick={() => onNavigate("messages")} className="flex items-center gap-2 px-4 py-2 bg-white border border-border rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
-                    <MessageSquare size={14} /> Message Freelancer
+                  <button onClick={() => messageCounterpart().catch(() => {})} className="flex items-center gap-2 px-4 py-2 bg-white border border-border rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                    <MessageSquare size={14} /> Message {isClient ? "Freelancer" : "Client"}
                   </button>
-                  <button className="flex items-center gap-2 px-4 py-2 bg-white border border-border rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
-                    <FileText size={14} /> View Contract
-                  </button>
+                  <span className="text-xs text-slate-400">{activeContract.number} · {activeContract.revisionsUsed}/{activeContract.revisionsAllowed} revisions used</span>
                 </div>
-                {activeContract.status === "active" && (
-                  <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity">
-                    <DollarSign size={14} /> Release Payment
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {activeContract.status === "pending_payment" && isClient && (
+                    <button disabled={actionBusy} onClick={payOrder} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
+                      {actionBusy ? <Loader2 size={14} className="animate-spin" /> : <Wallet size={14} />} Pay & Fund Escrow
+                    </button>
+                  )}
+                  {["active", "revision_requested"].includes(activeContract.status) && isFreelancer && activeContract.milestones.length === 0 && (
+                    <button disabled={actionBusy} onClick={submitDelivery} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
+                      <Upload size={14} /> Submit Delivery
+                    </button>
+                  )}
+                  {activeContract.status === "submitted" && isClient && (
+                    <>
+                      <button disabled={actionBusy} onClick={() => approveMilestone(null)} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
+                        <ThumbsUp size={14} /> Approve & Release Payment
+                      </button>
+                      <button disabled={actionBusy} onClick={() => requestRevision(null)} className="flex items-center gap-2 px-4 py-2 bg-white border border-border text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-100 transition-colors disabled:opacity-50">
+                        <RotateCcw size={14} /> Request Revision
+                      </button>
+                    </>
+                  )}
+                  {activeContract.status === "completed" && (
+                    <button
+                      disabled={actionBusy}
+                      onClick={() => {
+                        const rating = parseInt(window.prompt("Rate this collaboration (1–5):") ?? "", 10);
+                        if (!rating || rating < 1 || rating > 5) return;
+                        const comment = window.prompt("Leave a short review (optional):") ?? undefined;
+                        runAction("Review submitted — thank you!", () => fit.orders.review(activeContract.id, { rating, comment }));
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      <Star size={14} /> Leave a Review
+                    </button>
+                  )}
+                  {["active", "submitted", "revision_requested"].includes(activeContract.status) && (
+                    <button
+                      disabled={actionBusy}
+                      onClick={() => {
+                        const description = window.prompt("Describe the problem — FIT support will review the case:");
+                        if (!description) return;
+                        runAction("Dispute opened. FIT support will review it.", () => fit.orders.openDispute(activeContract.id, "other", description));
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 bg-white border border-red-200 text-red-500 rounded-xl text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      <AlertCircle size={13} /> Open Dispute
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>
@@ -2643,11 +3009,26 @@ function LoginPage({
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { setUser } = useApp();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onRoleSwitch(userType);
-    onNavigate(userType === "freelancer" ? "freelancer" : "client");
+    setSubmitting(true);
+    setError(null);
+    try {
+      const { token, user } = await fit.auth.login(email, password);
+      fit.setSession(token, user);
+      setUser(user);
+      const landedRole = roleOf(user);
+      onRoleSwitch(landedRole);
+      onNavigate(landedRole === "admin" ? "admin" : landedRole === "client" ? "client" : "freelancer");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.firstError : "Login failed. Check your connection.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -2760,12 +3141,18 @@ function LoginPage({
             </div>
           </div>
 
+          {error && (
+            <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 font-medium">
+              <AlertCircle size={16} className="flex-shrink-0" /> {error}
+            </div>
+          )}
+
           <button
             type="submit"
-            className="w-full py-3.5 px-4 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white hover:opacity-90 transition-opacity rounded-2xl flex items-center justify-center gap-2 font-bold text-base shadow-sm mt-8"
+            disabled={submitting}
+            className="w-full py-3.5 px-4 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white hover:opacity-90 transition-opacity rounded-2xl flex items-center justify-center gap-2 font-bold text-base shadow-sm mt-8 disabled:opacity-60"
           >
-            Sign In
-            <ArrowRight size={18} />
+            {submitting ? <Loader2 size={18} className="animate-spin" /> : <>Sign In <ArrowRight size={18} /></>}
           </button>
         </form>
 
@@ -2811,13 +3198,33 @@ function SignupPage({
 }) {
   const [userType, setUserType] = useState<"freelancer" | "client">("freelancer");
   const [showPassword, setShowPassword] = useState(false);
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { setUser } = useApp();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onRoleSwitch(userType);
-    onNavigate(userType === "freelancer" ? "freelancer" : "client");
+    setSubmitting(true);
+    setError(null);
+    try {
+      const { token, user } = await fit.auth.register({
+        name: fullName,
+        email,
+        password,
+        role: userType,
+      });
+      fit.setSession(token, user);
+      setUser(user);
+      onRoleSwitch(userType);
+      onNavigate(userType === "freelancer" ? "freelancer" : "client");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.firstError : "Signup failed. Check your connection.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -2887,6 +3294,21 @@ function SignupPage({
         {/* Input Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
+            <label className="block text-sm font-semibold text-slate-800" htmlFor="fullname">
+              Full name
+            </label>
+            <input
+              id="fullname"
+              type="text"
+              required
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Diane Ngono"
+              className="w-full px-4 py-3.5 bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0284C7]/20 focus:border-[#0284C7] rounded-2xl text-slate-900 placeholder-slate-400 text-sm transition-all shadow-sm"
+            />
+          </div>
+
+          <div className="space-y-2">
             <label className="block text-sm font-semibold text-slate-800" htmlFor="email">
               Email address
             </label>
@@ -2910,9 +3332,10 @@ function SignupPage({
                 id="password"
                 type={showPassword ? "text" : "password"}
                 required
+                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="•••••••• (min 8 characters)"
                 className="w-full px-4 py-3.5 bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0284C7]/20 focus:border-[#0284C7] rounded-2xl text-slate-900 placeholder-slate-400 text-sm transition-all shadow-sm pr-12"
               />
               <button
@@ -2925,12 +3348,18 @@ function SignupPage({
             </div>
           </div>
 
+          {error && (
+            <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 font-medium">
+              <AlertCircle size={16} className="flex-shrink-0" /> {error}
+            </div>
+          )}
+
           <button
             type="submit"
-            className="w-full py-3.5 px-4 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white hover:opacity-90 transition-opacity rounded-2xl flex items-center justify-center gap-2 font-bold text-base shadow-sm mt-8"
+            disabled={submitting}
+            className="w-full py-3.5 px-4 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white hover:opacity-90 transition-opacity rounded-2xl flex items-center justify-center gap-2 font-bold text-base shadow-sm mt-8 disabled:opacity-60"
           >
-            Sign Up
-            <ArrowRight size={18} />
+            {submitting ? <Loader2 size={18} className="animate-spin" /> : <>Sign Up <ArrowRight size={18} /></>}
           </button>
         </form>
 
@@ -2969,32 +3398,81 @@ function SignupPage({
 
 // ─── ACCOUNT PAGE ─────────────────────────────────────────────────────────────
 
-const ACCOUNT_SKILLS = ["React", "TypeScript", "Node.js", "GraphQL", "PostgreSQL", "AWS", "Docker", "Next.js"];
-const PORTFOLIO_ITEMS = [
-  { id: 1, title: "CEMAC FinTech Dashboard", desc: "Real-time transaction analytics built for mobile money platforms.", tags: ["React", "D3.js", "Node.js"], client: "MTN FinTech Lab", year: "2025" },
-  { id: 2, title: "AgriTrack Mobile App", desc: "Offline-first Flutter app for crop monitoring across West Africa.", tags: ["Flutter", "Firebase", "Dart"], client: "GreenField AgriTech", year: "2024" },
-  { id: 3, title: "Afrikart E-Commerce Platform", desc: "Full-stack cross-border e-commerce with XAF/USD dual currency support.", tags: ["Next.js", "Stripe", "PostgreSQL"], client: "Afrikart Commerce", year: "2024" },
-];
-
 function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role: Role }) {
+  const { user, setUser, refreshUser } = useApp();
   const [activeTab, setActiveTab] = useState<"profile" | "security" | "billing" | "notifications">("profile");
   const [editMode, setEditMode] = useState(false);
-  const [skills, setSkills] = useState(ACCOUNT_SKILLS);
+  const [skills, setSkills] = useState<string[]>([]);
   const [newSkill, setNewSkill] = useState("");
+  const [skillError, setSkillError] = useState<string | null>(null);
   const [profileForm, setProfileForm] = useState({
-    firstName: "Diane",
-    lastName: "Ngono",
-    title: "Senior React & TypeScript Developer",
-    email: "diane.ngono@example.com",
-    phone: "+237 6XX XXX XXX",
-    location: "Douala, Cameroon",
-    bio: "5+ years building scalable web applications for African startups and international clients. Specializing in financial technology and e-commerce platforms. Passionate about building products that make a real difference on the African continent.",
-    hourlyRate: "35",
+    firstName: "",
+    lastName: "",
+    title: "",
+    email: "",
+    phone: "",
+    location: "",
+    bio: "",
+    hourlyRate: "",
     availability: "Available Now",
   });
+  const [passwordForm, setPasswordForm] = useState({ current: "", next: "", confirm: "" });
+  const [passwordMessage, setPasswordMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [githubConnected, setGithubConnected] = useState(false);
   const [showGithubOnProfile, setShowGithubOnProfile] = useState(true);
+
+  const catalogSkills = useFetch(async () => (await fit.meta.skills()).data, []);
+  const portfolioState = useFetch(async () => {
+    if (!fit.getToken()) return [] as { id: number; title: string; desc: string; tags: string[]; client: string; year: string }[];
+    const response = await fit.api<{ data: any[] }>("/me/portfolio").catch(() => ({ data: [] as any[] }));
+    return response.data.map((item) => ({
+      id: item.id as number,
+      title: item.title as string,
+      desc: (item.description ?? "") as string,
+      tags: [] as string[],
+      client: (item.type === "link" ? "External link" : item.type) as string,
+      year: item.created_at ? new Date(item.created_at).getFullYear().toString() : "",
+    }));
+  }, []);
+  const billingState = useFetch(async () => {
+    if (!fit.getToken()) return null;
+    const [walletResponse, transactions] = await Promise.all([
+      fit.wallet.get().catch(() => null),
+      fit.wallet.transactions().catch(() => null),
+    ]);
+    return {
+      wallet: walletResponse ? unwrap(walletResponse) : null,
+      transactions: transactions?.data ?? [],
+    };
+  }, []);
+
+  const freelancerProfile = user?.freelancer_profile;
+
+  // Hydrate the form from the authenticated user.
+  useEffect(() => {
+    if (!user) return;
+    const [firstName, ...rest] = user.name.split(" ");
+    setProfileForm({
+      firstName,
+      lastName: rest.join(" "),
+      title: freelancerProfile?.title ?? "",
+      email: user.email ?? "",
+      phone: user.phone ?? "",
+      location: user.city?.name ?? "",
+      bio: freelancerProfile?.bio ?? "",
+      hourlyRate: freelancerProfile?.hourly_rate != null ? String(freelancerProfile.hourly_rate) : "",
+      availability:
+        freelancerProfile?.availability === "busy"
+          ? "Available part-time (< 30 hrs)"
+          : freelancerProfile?.availability === "unavailable"
+            ? "Not available"
+            : "Available Now",
+    });
+    setSkills((freelancerProfile?.skills ?? []).map((skill) => skill.name));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const tabs = [
     { key: "profile", label: "Profile", icon: Users },
@@ -3003,10 +3481,71 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
     { key: "notifications", label: "Notifications", icon: Bell },
   ];
 
-  const handleSave = () => {
-    setSaved(true);
-    setEditMode(false);
-    setTimeout(() => setSaved(false), 2500);
+  const handleSave = async () => {
+    setSaveError(null);
+    try {
+      const updated = unwrap(await fit.profile.update({
+        name: `${profileForm.firstName} ${profileForm.lastName}`.trim(),
+        email: profileForm.email || undefined,
+        phone: profileForm.phone || undefined,
+      }));
+
+      if (role === "freelancer" || user?.freelancer_profile) {
+        await fit.profile.updateFreelancerProfile({
+          title: profileForm.title || undefined,
+          bio: profileForm.bio || undefined,
+          hourly_rate: profileForm.hourlyRate ? parseFloat(profileForm.hourlyRate) : undefined,
+          availability: profileForm.availability.startsWith("Available Now")
+            ? "available"
+            : profileForm.availability.startsWith("Not")
+              ? "unavailable"
+              : "busy",
+        });
+
+        const skillIds = (catalogSkills.data ?? [])
+          .filter((skill) => skills.includes(skill.name))
+          .map((skill) => skill.id);
+        if (skillIds.length > 0) {
+          await fit.api("/me/freelancer-profile/skills", { method: "PUT", body: { skill_ids: skillIds } });
+        }
+      }
+
+      setUser(updated);
+      await refreshUser();
+      setSaved(true);
+      setEditMode(false);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.firstError : "Could not save your profile.");
+    }
+  };
+
+  const addSkill = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const catalogMatch = (catalogSkills.data ?? []).find((skill) => skill.name.toLowerCase() === trimmed.toLowerCase());
+    if (!catalogMatch) {
+      setSkillError(`"${trimmed}" is not in the FIT skills catalog yet. Pick an existing skill.`);
+      return;
+    }
+    setSkillError(null);
+    if (!skills.includes(catalogMatch.name)) setSkills([...skills, catalogMatch.name]);
+    setNewSkill("");
+  };
+
+  const handlePasswordUpdate = async () => {
+    setPasswordMessage(null);
+    if (passwordForm.next !== passwordForm.confirm) {
+      setPasswordMessage({ ok: false, text: "New passwords do not match." });
+      return;
+    }
+    try {
+      await fit.profile.changePassword(passwordForm.current, passwordForm.next, passwordForm.confirm);
+      setPasswordMessage({ ok: true, text: "Password updated." });
+      setPasswordForm({ current: "", next: "", confirm: "" });
+    } catch (err) {
+      setPasswordMessage({ ok: false, text: err instanceof ApiError ? err.firstError : "Password change failed." });
+    }
   };
 
   return (
@@ -3027,7 +3566,7 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
             <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-10 mb-4">
               <div className="relative flex-shrink-0">
                 <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#0284C7] to-[#06B6D4] flex items-center justify-center text-white text-2xl font-extrabold border-4 border-white shadow-lg">
-                  DN
+                  {user ? initialsOf(user.name) : "FI"}
                 </div>
                 <button className="absolute -bottom-1 -right-1 w-7 h-7 bg-[#0284C7] rounded-full flex items-center justify-center border-2 border-white hover:bg-[#0369A1] transition-colors">
                   <Camera size={11} className="text-white" />
@@ -3038,14 +3577,14 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
                   <h1 className="text-xl font-extrabold text-[#0D1117]">
                     {profileForm.firstName} {profileForm.lastName}
                   </h1>
-                  <Badge variant="success"><ShieldCheck size={10} /> ID Verified</Badge>
-                  <Badge variant="warning"><Award size={10} /> Top Rated</Badge>
+                  {freelancerProfile?.is_verified && <Badge variant="success"><ShieldCheck size={10} /> ID Verified</Badge>}
+                  {freelancerProfile?.is_top_rated && <Badge variant="warning"><Award size={10} /> Top Rated</Badge>}
                 </div>
-                <p className="text-slate-500 text-sm">{profileForm.title}</p>
+                <p className="text-slate-500 text-sm">{profileForm.title || (role === "client" ? "Client account" : "Add a professional headline")}</p>
                 <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-400">
-                  <span className="flex items-center gap-1"><MapPin size={10} />{profileForm.location}</span>
-                  <span className="flex items-center gap-1"><Star size={10} className="text-amber-400" />4.97 rating</span>
-                  <span className="flex items-center gap-1"><Briefcase size={10} />84 jobs completed</span>
+                  {profileForm.location && <span className="flex items-center gap-1"><MapPin size={10} />{profileForm.location}</span>}
+                  <span className="flex items-center gap-1"><Star size={10} className="text-amber-400" />{Number(freelancerProfile?.rating ?? user?.client_profile?.rating ?? 0).toFixed(2)} rating</span>
+                  <span className="flex items-center gap-1"><Briefcase size={10} />{freelancerProfile?.completed_orders_count ?? user?.client_profile?.hires_count ?? 0} jobs completed</span>
                   <span className="flex items-center gap-1 text-emerald-500"><div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />{profileForm.availability}</span>
                 </div>
               </div>
@@ -3070,14 +3609,19 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
                 <CheckCircle2 size={14} /> Profile saved successfully!
               </div>
             )}
+            {saveError && (
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-medium mb-4">
+                <AlertCircle size={14} /> {saveError}
+              </div>
+            )}
 
             {/* Quick stats row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 border-t border-border">
               {[
-                { label: "Job Success Score", value: "97%", color: "text-emerald-600", sub: "Top 3% of freelancers" },
-                { label: "Total Earned", value: "$48,200+", color: "text-[#0284C7]", sub: "Across 84 contracts" },
-                { label: "Connects", value: "42", color: "text-[#0D1117]", sub: "~7 proposals left" },
-                { label: "Response Rate", value: "98%", color: "text-[#0D1117]", sub: "Avg. reply: 2 hrs" },
+                { label: "Job Success Score", value: `${freelancerProfile?.job_success_score ?? 0}%`, color: "text-emerald-600", sub: "Based on completed orders" },
+                { label: "Total Earned", value: formatMoney(freelancerProfile?.total_earned ?? 0), color: "text-[#0284C7]", sub: `Across ${freelancerProfile?.completed_orders_count ?? 0} contracts` },
+                { label: "Connects", value: String(user?.connects_balance ?? 0), color: "text-[#0D1117]", sub: `~${Math.floor((user?.connects_balance ?? 0) / 6)} proposals left` },
+                { label: "Reviews", value: String(freelancerProfile?.reviews_count ?? user?.client_profile?.reviews_count ?? 0), color: "text-[#0D1117]", sub: "Order-verified reviews" },
               ].map((s) => (
                 <div key={s.label} className="text-center">
                   <div className={`text-xl font-extrabold ${s.color}`} style={{ fontFamily: "'JetBrains Mono', monospace" }}>{s.value}</div>
@@ -3210,18 +3754,25 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
                     ))}
                   </div>
                   {editMode && (
-                    <div className="flex gap-2">
-                      <input
-                        value={newSkill}
-                        onChange={(e) => setNewSkill(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter" && newSkill.trim()) { setSkills([...skills, newSkill.trim()]); setNewSkill(""); } }}
-                        placeholder="Add a skill and press Enter"
-                        className="flex-1 px-4 py-2.5 border border-border rounded-xl text-sm outline-none focus:border-[#0284C7] transition-colors"
-                      />
-                      <button onClick={() => { if (newSkill.trim()) { setSkills([...skills, newSkill.trim()]); setNewSkill(""); } }} className="px-4 py-2.5 bg-blue-50 text-[#0284C7] rounded-xl text-sm font-semibold hover:bg-blue-100 transition-colors">
-                        <Plus size={15} />
-                      </button>
-                    </div>
+                    <>
+                      <div className="flex gap-2">
+                        <input
+                          value={newSkill}
+                          onChange={(e) => setNewSkill(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { addSkill(newSkill); } }}
+                          list="fit-skill-catalog"
+                          placeholder="Add a skill and press Enter"
+                          className="flex-1 px-4 py-2.5 border border-border rounded-xl text-sm outline-none focus:border-[#0284C7] transition-colors"
+                        />
+                        <datalist id="fit-skill-catalog">
+                          {(catalogSkills.data ?? []).map((skill) => <option key={skill.id} value={skill.name} />)}
+                        </datalist>
+                        <button onClick={() => addSkill(newSkill)} className="px-4 py-2.5 bg-blue-50 text-[#0284C7] rounded-xl text-sm font-semibold hover:bg-blue-100 transition-colors">
+                          <Plus size={15} />
+                        </button>
+                      </div>
+                      {skillError && <p className="text-xs text-red-500 mt-2">{skillError}</p>}
+                    </>
                   )}
                 </div>
 
@@ -3236,7 +3787,10 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
                     </button>
                   </div>
                   <div className="space-y-3">
-                    {PORTFOLIO_ITEMS.map((item) => (
+                    {(portfolioState.data ?? []).length === 0 && (
+                      <p className="text-xs text-slate-400 py-2">No portfolio items yet — add work samples via the mobile app or API.</p>
+                    )}
+                    {(portfolioState.data ?? []).map((item) => (
                       <div key={item.id} className="flex items-start gap-4 p-4 bg-slate-50 rounded-xl border border-border hover:border-[#0284C7]/30 transition-colors group">
                         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0284C7] to-[#06B6D4] flex items-center justify-center flex-shrink-0">
                           <Code size={18} className="text-white" />
@@ -3269,13 +3823,26 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
                 <div className="bg-white rounded-2xl border border-border p-6">
                   <h3 className="font-bold text-[#0D1117] mb-5 flex items-center gap-2"><ShieldCheck size={16} className="text-[#0284C7]" /> Password</h3>
                   <div className="space-y-4 max-w-sm">
-                    {["Current Password", "New Password", "Confirm New Password"].map((label) => (
-                      <div key={label}>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>
-                        <input type="password" placeholder="••••••••" className="w-full px-4 py-2.5 border border-border rounded-xl text-sm bg-white outline-none focus:border-[#0284C7] transition-colors" />
+                    {([
+                      { label: "Current Password", key: "current" as const },
+                      { label: "New Password", key: "next" as const },
+                      { label: "Confirm New Password", key: "confirm" as const },
+                    ]).map((field) => (
+                      <div key={field.key}>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">{field.label}</label>
+                        <input
+                          type="password"
+                          value={passwordForm[field.key]}
+                          onChange={(e) => setPasswordForm({ ...passwordForm, [field.key]: e.target.value })}
+                          placeholder="••••••••"
+                          className="w-full px-4 py-2.5 border border-border rounded-xl text-sm bg-white outline-none focus:border-[#0284C7] transition-colors"
+                        />
                       </div>
                     ))}
-                    <button className="px-5 py-2.5 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity">Update Password</button>
+                    {passwordMessage && (
+                      <p className={`text-xs font-medium ${passwordMessage.ok ? "text-emerald-600" : "text-red-500"}`}>{passwordMessage.text}</p>
+                    )}
+                    <button onClick={handlePasswordUpdate} className="px-5 py-2.5 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity">Update Password</button>
                   </div>
                 </div>
 
@@ -3397,11 +3964,12 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
               <div className="space-y-5">
                 <div className="bg-white rounded-2xl border border-border p-6">
                   <h3 className="font-bold text-[#0D1117] mb-5 flex items-center gap-2"><Wallet size={16} className="text-[#0284C7]" /> Earnings Overview</h3>
+                  {billingState.loading && <LoadingBlock label="Loading wallet…" />}
                   <div className="grid grid-cols-3 gap-4 mb-6">
                     {[
-                      { label: "Total Earned", value: "$48,200", sub: "All time" },
-                      { label: "This Month", value: "$3,400", sub: "June 2025" },
-                      { label: "Pending", value: "$2,300", sub: "In escrow" },
+                      { label: "Total Earned", value: formatMoney(billingState.data?.wallet?.total_earned ?? 0), sub: "All time" },
+                      { label: "Available", value: formatMoney(billingState.data?.wallet?.available_balance ?? 0), sub: "Ready to withdraw" },
+                      { label: "Pending", value: formatMoney(billingState.data?.wallet?.pending_balance ?? 0), sub: "In escrow" },
                     ].map((s) => (
                       <div key={s.label} className="p-4 bg-slate-50 rounded-xl">
                         <div className="text-xs text-slate-500 mb-1">{s.label}</div>
@@ -3413,20 +3981,20 @@ function AccountPage({ onNavigate, role }: { onNavigate: (v: View) => void; role
                   <div className="border-t border-border pt-5">
                     <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Recent Transactions</div>
                     <div className="space-y-3">
-                      {[
-                        { desc: "MTN FinTech Lab — Milestone 1", date: "June 18, 2025", amount: "+$800", status: "Received" },
-                        { desc: "Afrikart Commerce — Final Payment", date: "June 10, 2025", amount: "+$600", status: "Received" },
-                        { desc: "Connects purchase — 20 packs", date: "June 5, 2025", amount: "-$15", status: "Paid" },
-                        { desc: "GreenField AgriTech — Milestone 2", date: "May 28, 2025", amount: "+$1,200", status: "Received" },
-                      ].map((tx) => (
-                        <div key={tx.desc} className="flex items-center justify-between py-2.5 border-b border-border last:border-0">
+                      {(billingState.data?.transactions ?? []).length === 0 && !billingState.loading && (
+                        <p className="text-xs text-slate-400 py-2">No wallet activity yet.</p>
+                      )}
+                      {(billingState.data?.transactions ?? []).slice(0, 8).map((tx) => (
+                        <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-border last:border-0">
                           <div>
-                            <div className="text-sm font-medium text-[#0D1117]">{tx.desc}</div>
-                            <div className="text-xs text-slate-400">{tx.date}</div>
+                            <div className="text-sm font-medium text-[#0D1117]">{tx.description ?? tx.type.replace(/_/g, " ")}</div>
+                            <div className="text-xs text-slate-400">{timeAgo(tx.created_at)}</div>
                           </div>
                           <div className="text-right">
-                            <div className={`text-sm font-bold font-mono ${tx.amount.startsWith("+") ? "text-emerald-600" : "text-red-500"}`} style={{ fontFamily: "'JetBrains Mono', monospace" }}>{tx.amount}</div>
-                            <Badge variant={tx.amount.startsWith("+") ? "success" : "default"}>{tx.status}</Badge>
+                            <div className={`text-sm font-bold font-mono ${Number(tx.amount) >= 0 ? "text-emerald-600" : "text-red-500"}`} style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                              {Number(tx.amount) >= 0 ? "+" : ""}{formatMoney(tx.amount)}
+                            </div>
+                            <Badge variant={Number(tx.amount) >= 0 ? "success" : "default"}>{tx.type.replace(/_/g, " ")}</Badge>
                           </div>
                         </div>
                       ))}
@@ -3543,6 +4111,8 @@ function BuyConnectsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
   const [cardCvv, setCardCvv] = useState("");
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+  const { user, refreshUser } = useApp();
   const [faqOpen, setFaqOpen] = useState<Record<number, boolean>>({
     0: false,
     1: false,
@@ -3550,17 +4120,32 @@ function BuyConnectsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
     3: false,
   });
 
-  const packs = [
-    { id: 1, connects: 10, priceUSD: 1.50, costPerConnectUSD: 0.15, unlocked: 1, label: "Starter Pack", save: null },
-    { id: 2, connects: 20, priceUSD: 3.00, costPerConnectUSD: 0.15, unlocked: 3, label: "Starter Plus", save: null },
-    { id: 3, connects: 50, priceUSD: 6.00, costPerConnectUSD: 0.12, unlocked: 8, label: "Most Popular", badge: "Most Popular", save: null },
-    { id: 4, connects: 100, priceUSD: 10.00, costPerConnectUSD: 0.10, unlocked: 16, label: "Best Value", badge: "Best Value", save: "Save 33%" },
-    { id: 5, connects: 200, priceUSD: 18.00, costPerConnectUSD: 0.09, unlocked: 33, label: "Power Pack", badge: "Power Pack", save: "Save 40%" },
-  ];
+  const packsState = useFetch(async () => {
+    const [packsResponse, settings] = await Promise.all([
+      fit.connects.packs(),
+      fit.meta.settings().catch(() => ({}) as Record<string, unknown>),
+    ]);
+    return {
+      packs: packsResponse.data.map((pack) => ({
+        id: pack.id,
+        connects: pack.connects,
+        priceUSD: Number(pack.price_usd),
+        priceXAF: Number(pack.price_xaf),
+        costPerConnectUSD: Number(pack.price_usd) / pack.connects,
+        unlocked: Math.floor(pack.connects / 6),
+        label: pack.name,
+        badge: pack.badge ?? undefined,
+        save: pack.savings_label,
+      })),
+      xafRate: Number((settings as Record<string, unknown>).xaf_per_usd ?? 600),
+    };
+  }, []);
 
+  const packs = packsState.data?.packs ?? [];
   const selectedPack = packs.find(p => p.id === selectedPackId) || packs[0];
+  const balance = user?.connects_balance ?? 0;
 
-  const XAF_RATE = 600;
+  const XAF_RATE = packsState.data?.xafRate ?? 600;
   const formatPrice = (usd: number) => {
     if (currency === "USD") {
       return `$${usd.toFixed(2)}`;
@@ -3606,13 +4191,22 @@ function BuyConnectsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
     }
   };
 
-  const handlePay = (e: React.FormEvent) => {
+  const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedPack) return;
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setPayError(null);
+    try {
+      const payment = unwrap(await fit.connects.purchase(selectedPack.id, paymentMethod, currency, phoneNumber || undefined)) as fit.ApiPayment;
+      // Sandbox settlement — in production the Mobile Money webhook confirms the payment.
+      await fit.payments.confirmSandbox(payment.reference);
+      await refreshUser();
       setStage(3);
-    }, 2000);
+    } catch (err) {
+      setPayError(err instanceof ApiError ? err.firstError : "Payment failed. Try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getPaymentMethodLabel = () => {
@@ -3623,6 +4217,14 @@ function BuyConnectsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
       case "paypal": return "PayPal";
     }
   };
+
+  if (packsState.loading || !selectedPack) {
+    return <div className="min-h-screen bg-slate-50"><LoadingBlock label="Loading connect packs…" /></div>;
+  }
+
+  if (packsState.error) {
+    return <div className="min-h-screen bg-slate-50"><ErrorBlock message={packsState.error} onRetry={packsState.reload} /></div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 text-slate-800" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -3651,10 +4253,10 @@ function BuyConnectsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
               <div className="bg-[#0F172A] text-white py-3 px-5 rounded-2xl flex items-center gap-4 shadow-sm border border-slate-800 self-start md:self-auto">
                 <div className="flex items-center gap-2">
                   <Wallet size={16} className="text-cyan-400" />
-                  <span className="text-sm font-bold"><span className="text-cyan-400 font-mono text-base">42</span> Connects</span>
+                  <span className="text-sm font-bold"><span className="text-cyan-400 font-mono text-base">{balance}</span> Connects</span>
                 </div>
                 <div className="w-px h-6 bg-slate-800" />
-                <span className="text-xs text-slate-400 font-semibold">Proposals left: <span className="text-amber-400 font-mono">~7</span></span>
+                <span className="text-xs text-slate-400 font-semibold">Proposals left: <span className="text-amber-400 font-mono">~{Math.floor(balance / 6)}</span></span>
               </div>
             </div>
 
@@ -3818,7 +4420,7 @@ function BuyConnectsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
                   <div className="space-y-2.5 text-sm font-semibold pt-2">
                     <div className="flex justify-between text-slate-500">
                       <span>Balance after</span>
-                      <span className="text-slate-800 font-mono">{42 + selectedPack.connects} connects</span>
+                      <span className="text-slate-800 font-mono">{balance + selectedPack.connects} connects</span>
                     </div>
                     <div className="flex justify-between text-slate-500">
                       <span>Proposals unlocked</span>
@@ -4162,19 +4764,24 @@ function BuyConnectsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
                   <div className="bg-[#F0F9FF] border border-[#B3E0F2]/30 rounded-xl p-3.5 flex justify-between text-xs font-semibold">
                     <div>
                       <div className="text-slate-400 text-[10px] font-bold uppercase tracking-wide">After purchase</div>
-                      <div className="text-slate-800 font-extrabold mt-0.5">{42 + selectedPack.connects} Connects</div>
+                      <div className="text-slate-800 font-extrabold mt-0.5">{balance + selectedPack.connects} Connects</div>
                     </div>
                     <div className="text-right">
                       <div className="text-slate-400 text-[10px] font-bold uppercase tracking-wide">Current balance</div>
-                      <div className="text-slate-500 font-extrabold mt-0.5">42</div>
+                      <div className="text-slate-500 font-extrabold mt-0.5">{balance}</div>
                     </div>
                   </div>
 
                   {/* Secure CTA Pay Button */}
+                  {payError && (
+                    <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 font-medium">
+                      <AlertCircle size={15} className="flex-shrink-0" /> {payError}
+                    </div>
+                  )}
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full py-3.5 px-4 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-2xl font-extrabold text-sm shadow-sm hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+                    className="w-full py-3.5 px-4 bg-gradient-to-r from-[#0284C7] to-[#06B6D4] text-white rounded-2xl font-extrabold text-sm shadow-sm hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5 disabled:opacity-60"
                   >
                     {isSubmitting ? (
                       <>
@@ -4268,7 +4875,7 @@ function BuyConnectsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
 
               <div className="pt-4 flex items-center justify-between text-sm font-extrabold">
                 <span className="text-slate-800">New Connects Balance</span>
-                <span className="text-[#0284C7] font-mono text-lg">{42 + selectedPack.connects} Connects</span>
+                <span className="text-[#0284C7] font-mono text-lg">{balance} Connects</span>
               </div>
 
             </div>
@@ -4310,12 +4917,34 @@ function InternshipsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
   const [lang] = useLang();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
+  const [appliedIds, setAppliedIds] = useState<number[]>([]);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const { user } = useApp();
 
-  const filtered = INTERNSHIPS.filter((intern) => {
+  const internshipsState = useFetch(async () => {
+    const response = await fit.internships.list();
+    return response.data.map(toInternshipVM);
+  }, []);
+
+  const filtered = (internshipsState.data ?? []).filter((intern) => {
     const matchSearch = search === "" || intern.title.toLowerCase().includes(search.toLowerCase()) || intern.company.toLowerCase().includes(search.toLowerCase()) || intern.skills.some((s) => s.toLowerCase().includes(search.toLowerCase()));
     const matchType = typeFilter === "All" || intern.type === typeFilter;
     return matchSearch && matchType;
   });
+
+  const apply = async (internshipId: number) => {
+    if (!user) {
+      onNavigate("signup");
+      return;
+    }
+    setApplyError(null);
+    try {
+      await fit.internships.apply(internshipId);
+      setAppliedIds((prev) => [...prev, internshipId]);
+    } catch (err) {
+      setApplyError(err instanceof ApiError ? err.firstError : "Application failed.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -4360,6 +4989,13 @@ function InternshipsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
         </div>
 
         {/* Results */}
+        {internshipsState.loading && <LoadingBlock label="Loading internships…" />}
+        {internshipsState.error && <ErrorBlock message={internshipsState.error} onRetry={internshipsState.reload} />}
+        {applyError && (
+          <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 font-medium">
+            <AlertCircle size={15} /> {applyError}
+          </div>
+        )}
         <div className="text-sm text-slate-500 mb-4">{filtered.length} {lang === "en" ? "internships found" : "stages trouvés"}</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {filtered.map((intern) => (
@@ -4398,10 +5034,11 @@ function InternshipsPage({ onNavigate }: { onNavigate: (v: View) => void }) {
                   <span className="flex items-center gap-1"><Clock size={12} /> {intern.duration}</span>
                 </div>
                 <button
-                  onClick={() => { onNavigate("signup"); }}
-                  className="px-4 py-2 bg-gradient-to-r from-[#6366F1] to-[#818CF8] text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                  onClick={() => apply(intern.id)}
+                  disabled={appliedIds.includes(intern.id)}
+                  className="px-4 py-2 bg-gradient-to-r from-[#6366F1] to-[#818CF8] text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
                 >
-                  {lang === "en" ? "Apply Now" : "Postuler"}
+                  {appliedIds.includes(intern.id) ? (lang === "en" ? "Applied ✓" : "Postulé ✓") : lang === "en" ? "Apply Now" : "Postuler"}
                 </button>
               </div>
             </div>
@@ -4418,21 +5055,184 @@ function AdminDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
   const [lang] = useLang();
   const [activeTab, setActiveTab] = useState<number>(1);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { user: adminUser } = useApp();
 
-  // Stateful Admin Datasets for interactive front-end actions
-  const [users, setUsers] = useState(ADMIN_USERS_LIST);
-  const [projects, setProjects] = useState(ADMIN_PROJECTS_LIST);
-  const [transactions, setTransactions] = useState(ADMIN_TRANSACTIONS_LIST);
-  const [withdrawals, setWithdrawals] = useState(ADMIN_WITHDRAWALS_LIST);
-  const [disputes, setDisputes] = useState(ADMIN_DISPUTES_LIST);
-  const [reviews, setReviews] = useState(ADMIN_REVIEWS_LIST);
-  const [categories, setCategories] = useState(ADMIN_CATEGORIES_LIST);
-  const [skills, setSkills] = useState(ADMIN_SKILLS_LIST);
-  const [notifications, setNotifications] = useState(ADMIN_NOTIFICATIONS_LIST);
-  const [coupons, setCoupons] = useState(ADMIN_COUPONS_LIST);
-  const [countries, setCountries] = useState(ADMIN_COUNTRIES_LIST);
-  const [blogs, setBlogs] = useState(ADMIN_BLOGS_LIST);
-  const [plans, setPlans] = useState(ADMIN_PLANS_LIST);
+  // Admin datasets, loaded from the FIT API and mapped to the table row shapes.
+  const [users, setUsers] = useState<any[]>([]);
+  const [verifications, setVerifications] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [disputes, setDisputes] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [skills, setSkills] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [coupons, setCoupons] = useState<any[]>([]);
+  const [countries, setCountries] = useState<any[]>([]);
+  const [blogs, setBlogs] = useState(ADMIN_BLOGS_LIST); // Editorial blog has no backend module yet (local only).
+  const [plans, setPlans] = useState<any[]>([]);
+  const [kpis, setKpis] = useState<Record<string, any> | null>(null);
+  const [revenueMonths, setRevenueMonths] = useState<any[]>([]);
+  const [platformSettings, setPlatformSettings] = useState<Record<string, any>>({});
+  const [adminLoading, setAdminLoading] = useState(true);
+  const [adminError, setAdminError] = useState<string | null>(null);
+
+  const fmtDate = (iso: string | null | undefined) =>
+    iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }) : "—";
+
+  const loadAdminData = useCallback(async () => {
+    setAdminLoading(true);
+    setAdminError(null);
+    try {
+      const [
+        dashboard, usersRes, verificationsRes, jobsRes, paymentsRes, withdrawalsRes,
+        disputesRes, reviewsRes, categoriesRes, skillsRes, broadcastsRes, couponsRes,
+        countriesRes, plansRes, revenueRes, ticketsRes,
+      ] = await Promise.all([
+        fit.admin.dashboard(),
+        fit.admin.users(),
+        fit.admin.verifications(),
+        fit.admin.jobs(),
+        fit.admin.payments(),
+        fit.admin.withdrawals(),
+        fit.admin.disputes(),
+        fit.admin.reviews(),
+        fit.admin.categories(),
+        fit.admin.skills(),
+        fit.admin.broadcasts(),
+        fit.admin.coupons(),
+        fit.admin.countries(),
+        fit.admin.plans(),
+        fit.admin.revenueReport(),
+        fit.admin.tickets(),
+      ]);
+      const settingsRes = await fit.admin.settings().catch(() => ({}));
+
+      setKpis(dashboard);
+      setPlatformSettings(settingsRes as Record<string, any>);
+      setUsers(usersRes.data.map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email ?? "—",
+        phone: u.phone ?? "—",
+        country: u.city?.name ?? "Cameroon",
+        role: u.role,
+        status: u.status ?? "active",
+        verified: u.freelancer_profile?.is_verified ? "verified" : u.email_verified ? "pending" : "unverified",
+        dateJoined: fmtDate(u.created_at),
+        photo: initialsOf(u.name),
+      })));
+      setVerifications(verificationsRes.data.map((v: any) => ({
+        id: v.id,
+        name: v.user?.name ?? "User",
+        type: v.type,
+        documentType: v.document_type ?? "document",
+        status: v.status,
+        date: fmtDate(v.created_at),
+      })));
+      setProjects(jobsRes.data.map((j: any) => ({
+        id: j.id,
+        name: j.title,
+        client: j.client?.name ?? "—",
+        freelancer: "—",
+        budget: j.budget_max ? formatMoney(j.budget_max, j.currency) : "Negotiable",
+        deadline: j.deadline ?? "—",
+        status: j.status === "open" ? "Open" : j.status === "contracted" ? "In Progress" : j.status === "cancelled" ? "Cancelled" : j.status === "closed" ? "Completed" : j.status,
+        flagged: j.contact_flagged ?? false,
+      })));
+      setTransactions(paymentsRes.data.map((p: any) => ({
+        id: p.reference,
+        client: p.payer?.name ?? "—",
+        freelancer: p.order?.freelancer?.name ?? "—",
+        amount: formatMoney(p.amount, p.currency),
+        method: p.provider === "mtn_momo" ? "MTN Mobile Money" : p.provider === "orange_money" ? "Orange Money" : p.provider === "card" ? "Card" : p.provider,
+        status: p.status === "successful" ? "Escrow Funded" : p.status === "refunded" ? "Refunded" : p.status === "failed" ? "Failed" : "Pending",
+        date: fmtDate(p.created_at),
+      })));
+      setWithdrawals(withdrawalsRes.data.map((w: any) => ({
+        id: w.id,
+        freelancer: w.user?.name ?? "—",
+        amount: formatMoney(w.amount, w.currency),
+        method: w.method === "mtn_momo" ? "MTN MoMo" : "Orange Money",
+        date: fmtDate(w.created_at),
+        status: w.status.charAt(0).toUpperCase() + w.status.slice(1),
+      })));
+      setDisputes(disputesRes.data.map((d: any) => ({
+        id: d.id,
+        ref: `DSP-${d.id}`,
+        client: d.order?.client?.name ?? "—",
+        freelancer: d.order?.freelancer?.name ?? "—",
+        project: d.order?.title ?? "—",
+        date: fmtDate(d.created_at),
+        status: d.status === "resolved" ? "Resolved" : d.status === "under_review" ? "Pending" : "Open",
+      })));
+      setReviews(reviewsRes.data.map((r: any) => ({
+        id: r.id,
+        reviewer: r.reviewer?.name ?? "—",
+        user: r.reviewee?.name ?? "—",
+        rating: r.rating,
+        comment: r.comment ?? "",
+        date: fmtDate(r.created_at),
+        hidden: r.status !== "published",
+      })));
+      setCategories(categoriesRes.data.map((c: any) => ({
+        id: c.id,
+        name: c.name_en,
+        icon: c.icon ?? "Layers",
+        count: c.jobs_count ?? 0,
+        active: c.is_active,
+      })));
+      setSkills(skillsRes.data.map((s: any) => ({
+        id: s.id,
+        skill: s.name,
+        category: categoriesRes.data.find((c: any) => c.id === s.category_id)?.name_en ?? "General",
+        count: 0,
+      })));
+      setNotifications((broadcastsRes.data ?? []).map((b: any) => ({
+        id: b.id,
+        title: b.title,
+        message: b.body,
+        audience: b.audience === "all" ? "All Users" : b.audience === "freelancers" ? "Freelancers" : "Clients",
+        date: fmtDate(b.sent_at),
+      })));
+      setCoupons((couponsRes.data ?? []).map((c: any) => ({
+        id: c.id,
+        code: c.code,
+        discount: c.type === "percent" ? `${Number(c.value)}%` : formatMoney(c.value),
+        expiryDate: c.expires_at ? fmtDate(c.expires_at) : "No expiry",
+        status: c.is_active && (!c.expires_at || new Date(c.expires_at) > new Date()) ? "Active" : "Expired",
+      })));
+      setCountries(countriesRes.data.map((c: any) => ({
+        id: c.id,
+        country: c.name,
+        currency: c.currency_code,
+        status: "Active",
+      })));
+      setPlans(plansRes.data.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        price: formatMoney(p.price, p.currency),
+        billing: p.period === "yearly" ? "year" : "month",
+        subscribers: 0,
+      })));
+      setRevenueMonths(revenueRes.months ?? []);
+      setAdminChats((ticketsRes.data ?? []).map((t: any) => ({
+        id: t.id,
+        name: `${t.user?.name ?? "User"} — ${t.subject}`,
+        status: t.status,
+        messages: [],
+      })));
+    } catch (err) {
+      setAdminError(err instanceof ApiError ? err.firstError : "Could not load admin data. Are you signed in as an admin?");
+    } finally {
+      setAdminLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAdminData();
+  }, [loadAdminData]);
 
   // Search & filter states
   const [userSearch, setUserSearch] = useState("");
@@ -4527,66 +5327,101 @@ function AdminDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
     );
   }
 
-  // Interactive action handlers
+  // Interactive action handlers — each calls the API, then refreshes the datasets.
+  const runAdminAction = async (action: () => Promise<unknown>) => {
+    try {
+      await action();
+      await loadAdminData();
+    } catch (err) {
+      setAdminError(err instanceof ApiError ? err.firstError : "Action failed.");
+    }
+  };
+
   const handleToggleUserStatus = (id: number) => {
-    setUsers(users.map(u => u.id === id ? { ...u, status: u.status === "active" ? "suspended" : "active" } : u));
+    const target = users.find(u => u.id === id);
+    if (!target) return;
+    runAdminAction(() => target.status === "active" ? fit.admin.suspendUser(id) : fit.admin.activateUser(id));
   };
 
   const handleVerifyUser = (id: number) => {
-    setUsers(users.map(u => u.id === id ? { ...u, verified: "verified" } : u));
+    // Approves the user's oldest pending verification request.
+    const pending = verifications.find(v => v.status === "pending" && users.find(u => u.id === id)?.name === v.name);
+    if (!pending) {
+      setAdminError("This user has no pending verification request.");
+      return;
+    }
+    runAdminAction(() => fit.admin.approveVerification(pending.id));
   };
 
   const handleApproveWithdrawal = (id: number) => {
-    setWithdrawals(withdrawals.map(w => w.id === id ? { ...w, status: "Approved" } : w));
+    runAdminAction(() => fit.admin.approveWithdrawal(id));
+  };
+
+  const handleMarkWithdrawalPaid = (id: number) => {
+    runAdminAction(() => fit.admin.markWithdrawalPaid(id));
   };
 
   const handleRejectWithdrawal = (id: number) => {
-    setWithdrawals(withdrawals.map(w => w.id === id ? { ...w, status: "Rejected" } : w));
+    const reason = window.prompt("Reason for rejection (sent to the freelancer):");
+    if (!reason) return;
+    runAdminAction(() => fit.admin.rejectWithdrawal(id, reason));
   };
 
-  const handleResolveDispute = (id: string) => {
-    setDisputes(disputes.map(d => d.id === id ? { ...d, status: "Resolved" } : d));
+  const handleResolveDispute = (id: number | string) => {
+    const numericId = typeof id === "string" ? parseInt(id.replace(/\D/g, ""), 10) : id;
+    const resolution = window.prompt("Resolution: refund_client | release_freelancer | cancel_order", "release_freelancer");
+    if (!resolution || !["refund_client", "release_freelancer", "cancel_order"].includes(resolution)) return;
+    const note = window.prompt("Decision note (kept in the audit trail):") ?? undefined;
+    runAdminAction(() => fit.admin.resolveDispute(numericId, resolution, note));
   };
 
   const handleToggleReviewVisibility = (id: number) => {
-    setReviews(reviews.map(r => r.id === id ? { ...r, hidden: !r.hidden } : r));
+    const review = reviews.find(r => r.id === id);
+    if (!review) return;
+    runAdminAction(() => fit.admin.moderateReview(id, review.hidden ? "published" : "hidden"));
   };
 
   const handleAddCategory = () => {
     if (!newCatName.trim()) return;
-    setCategories([...categories, { id: Date.now(), name: newCatName, icon: "Layers", count: 0 }]);
+    runAdminAction(() => fit.admin.createCategory({ name_en: newCatName.trim(), name_fr: newCatName.trim() }));
     setNewCatName("");
   };
 
   const handleAddSkill = () => {
     if (!newSkillName.trim()) return;
-    setSkills([...skills, { id: Date.now(), skill: newSkillName, category: newSkillCat, count: 0 }]);
+    const category = categories.find(c => c.name === newSkillCat);
+    runAdminAction(() => fit.admin.createSkill(newSkillName.trim(), category?.id));
     setNewSkillName("");
   };
 
   const handleSendNotification = () => {
     if (!notifTitle.trim() || !notifMsg.trim()) return;
-    setNotifications([{ id: Date.now(), title: notifTitle, message: notifMsg, audience: notifAudience, date: "Just Now" }, ...notifications]);
+    const audience = notifAudience === "Freelancers" ? "freelancers" : notifAudience === "Clients" ? "clients" : "all";
+    runAdminAction(() => fit.admin.sendBroadcast(notifTitle, notifMsg, audience as "all" | "freelancers" | "clients"));
     setNotifTitle("");
     setNotifMsg("");
   };
 
   const handleAddCoupon = () => {
     if (!newCouponCode.trim()) return;
-    setCoupons([...coupons, { id: Date.now(), code: newCouponCode.toUpperCase(), discount: newCouponDiscount, expiryDate: "Dec 31, 2026", status: "Active" }]);
+    const value = parseFloat(newCouponDiscount.replace(/[^\d.]/g, "")) || 10;
+    runAdminAction(() => fit.admin.createCoupon({ code: newCouponCode.toUpperCase(), type: "percent", value }));
     setNewCouponCode("");
   };
 
   const handleAddCountry = () => {
     if (!newCountryName.trim()) return;
-    setCountries([...countries, { id: Date.now(), country: newCountryName, currency: newCountryCurr, status: "Active" }]);
+    const code = newCountryName.trim().slice(0, 2).toUpperCase();
+    runAdminAction(() => fit.admin.createCountry({ name: newCountryName.trim(), code, currency_code: newCountryCurr }));
     setNewCountryName("");
   };
 
   const handleSendAdminChatMessage = () => {
     if (!adminChatText.trim()) return;
-    setAdminChats(adminChats.map(c => c.id === adminChatActive ? { ...c, messages: [...(c.messages || []), { sender: "admin", text: adminChatText }] } : c));
+    const text = adminChatText;
+    setAdminChats(adminChats.map(c => c.id === adminChatActive ? { ...c, messages: [...(c.messages || []), { sender: "admin", text }] } : c));
     setAdminChatText("");
+    fit.admin.replyTicket(adminChatActive, text).catch(() => setAdminError("Reply failed to send."));
   };
 
   const simulateExport = (type: string) => {
@@ -4667,14 +5502,16 @@ function AdminDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
           {/* TAB 1: DASHBOARD OVERVIEW */}
           {activeTab === 1 && (
             <div className="space-y-6 animate-fadeIn">
+              {adminLoading && <LoadingBlock label="Loading platform data…" />}
+              {adminError && <ErrorBlock message={adminError} onRetry={loadAdminData} />}
               {/* Stats Cards */}
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 {[
-                  { label: "Total Users", value: "1,842", sub: "+12% this week", color: "text-[#0284C7]", icon: Users },
-                  { label: "Active Projects", value: "320", sub: "28 in escrow", color: "text-indigo-600", icon: Briefcase },
-                  { label: "Total Revenue", value: "XAF 8.4M", sub: "USD 14.2K converted", color: "text-emerald-600", icon: DollarSign },
-                  { label: "Pending Withdrawals", value: "3 requests", sub: "Action required", color: "text-amber-600", icon: Wallet },
-                  { label: "Open Disputes", value: "1 case", sub: "Review arguments", color: "text-red-600", icon: AlertCircle },
+                  { label: "Total Users", value: String(kpis?.users?.total ?? "—"), sub: `+${kpis?.users?.new_this_month ?? 0} this month`, color: "text-[#0284C7]", icon: Users },
+                  { label: "Active Orders", value: String(kpis?.orders?.active ?? "—"), sub: `${kpis?.jobs?.open ?? 0} jobs open`, color: "text-indigo-600", icon: Briefcase },
+                  { label: "Commission Revenue", value: formatMoney(kpis?.finance?.commission_revenue ?? 0), sub: `${formatMoney(kpis?.orders?.gross_volume ?? 0)} gross volume`, color: "text-emerald-600", icon: DollarSign },
+                  { label: "Pending Withdrawals", value: `${kpis?.finance?.withdrawals_pending ?? 0} requests`, sub: formatMoney(kpis?.finance?.withdrawals_pending_amount ?? 0), color: "text-amber-600", icon: Wallet },
+                  { label: "Open Disputes", value: `${kpis?.disputes?.open ?? 0} cases`, sub: "Review arguments", color: "text-red-600", icon: AlertCircle },
                 ].map((stat, idx) => (
                   <div key={idx} className="bg-white rounded-2xl border border-border p-4 shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-2">
@@ -5114,6 +5951,14 @@ function AdminDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
                               </button>
                             </>
                           )}
+                          {withdraw.status === "Approved" && (
+                            <button
+                              onClick={() => handleMarkWithdrawalPaid(withdraw.id)}
+                              className="px-2.5 py-1.5 bg-blue-50 text-[#0284C7] rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
+                            >
+                              Mark Paid
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -5460,6 +6305,45 @@ function AdminDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
                 <p className="text-xs text-slate-500">Download formatted databases for taxation audits and operations</p>
               </div>
 
+              {/* Monthly revenue (live) */}
+              <div className="border border-border rounded-2xl overflow-hidden">
+                <div className="px-4 py-3 bg-slate-50 border-b border-border flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Monthly Revenue — last 12 months</span>
+                  <button
+                    onClick={() => {
+                      const csv = ["month,completed_orders,gross_volume,commission_revenue",
+                        ...revenueMonths.map((m: any) => `${m.month},${m.completed_orders},${m.gross_volume},${m.commission_revenue}`)].join("\n");
+                      const link = document.createElement("a");
+                      link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+                      link.download = "fit-revenue-report.csv";
+                      link.click();
+                    }}
+                    className="text-[10px] font-bold text-[#0284C7] hover:underline"
+                  >
+                    Export CSV
+                  </button>
+                </div>
+                {revenueMonths.length === 0 ? (
+                  <p className="px-4 py-4 text-xs text-slate-400">No completed orders in the last 12 months yet.</p>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead><tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-border">
+                      <th className="px-4 py-2">Month</th><th className="px-4 py-2">Completed Orders</th><th className="px-4 py-2">Gross Volume</th><th className="px-4 py-2">Commission Revenue</th>
+                    </tr></thead>
+                    <tbody>
+                      {revenueMonths.map((m: any) => (
+                        <tr key={m.month} className="border-b border-slate-50 last:border-0 text-slate-600">
+                          <td className="px-4 py-2.5 font-bold text-[#0D1117]">{m.month}</td>
+                          <td className="px-4 py-2.5">{m.completed_orders}</td>
+                          <td className="px-4 py-2.5 font-mono">{formatMoney(m.gross_volume)}</td>
+                          <td className="px-4 py-2.5 font-mono text-emerald-600">{formatMoney(m.commission_revenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 {[
                   { title: "Financial Revenue Statement", desc: "PDF export containing escrow payouts and commission cuts", format: "PDF", color: "from-rose-500 to-red-600" },
@@ -5774,9 +6658,40 @@ function AdminDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
                 </div>
               </div>
 
+              {/* Marketplace economics — live platform settings */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider pb-2 border-b border-border">Marketplace Economics (live)</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {[
+                    { key: "commission_rate", label: "Commission Rate (0–0.5)" },
+                    { key: "default_connects_per_proposal", label: "Connects per Proposal" },
+                    { key: "free_connects_on_signup", label: "Signup Bonus Connects" },
+                    { key: "referral_bonus_connects", label: "Referral Bonus Connects" },
+                    { key: "xaf_per_usd", label: "XAF per USD" },
+                    { key: "min_withdrawal_amount", label: "Min Withdrawal (XAF)" },
+                  ].map((setting) => (
+                    <div key={setting.key} className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{setting.label}</label>
+                      <input
+                        value={platformSettings[setting.key] ?? ""}
+                        onChange={(e) => setPlatformSettings({ ...platformSettings, [setting.key]: e.target.value })}
+                        className="w-full px-3 py-2 border border-border rounded-xl text-xs outline-none text-slate-700 font-mono"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="pt-4 border-t border-border flex justify-end">
                 <button
-                  onClick={() => alert("Settings saved successfully!")}
+                  onClick={() => runAdminAction(() => fit.admin.updateSettings({
+                    commission_rate: parseFloat(platformSettings.commission_rate) || 0.1,
+                    default_connects_per_proposal: parseInt(platformSettings.default_connects_per_proposal, 10) || 6,
+                    free_connects_on_signup: parseInt(platformSettings.free_connects_on_signup, 10) || 10,
+                    referral_bonus_connects: parseInt(platformSettings.referral_bonus_connects, 10) || 5,
+                    xaf_per_usd: parseFloat(platformSettings.xaf_per_usd) || 600,
+                    min_withdrawal_amount: parseFloat(platformSettings.min_withdrawal_amount) || 5000,
+                  }))}
                   className="px-5 py-2.5 bg-[#0D1117] hover:opacity-90 text-white rounded-xl text-xs font-bold"
                 >
                   Save Configuration
@@ -5794,10 +6709,10 @@ function AdminDashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
               </div>
 
               <div className="flex items-center gap-4 border-b border-border pb-6">
-                <Avatar initials="AD" gradient="from-slate-700 to-slate-900" size="xl" />
+                <Avatar initials={adminUser ? initialsOf(adminUser.name) : "AD"} gradient="from-slate-700 to-slate-900" size="xl" />
                 <div>
-                  <h4 className="font-bold text-sm text-[#0D1117]">System Administrator</h4>
-                  <p className="text-xs text-slate-400">admin@fit.africa</p>
+                  <h4 className="font-bold text-sm text-[#0D1117]">{adminUser?.name ?? "System Administrator"}</h4>
+                  <p className="text-xs text-slate-400">{adminUser?.email ?? "admin@fit.africa"}</p>
                   <button className="mt-2 px-3 py-1.5 border border-border hover:bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 transition-colors">
                     Upload Photo
                   </button>
@@ -5967,6 +6882,69 @@ function Bootloader() {
 export default function App({ initialRole = "guest", initialView = "landing" }: { initialRole?: Role; initialView?: View }) {
   const [view, setView] = useState<View>(initialView);
   const [role, setRole] = useState<Role>(initialRole);
+  const [user, setUser] = useState<ApiUser | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  const [openConversationId, setOpenConversationId] = useState<number | null>(null);
+
+  // Restore the session from the stored Sanctum token on first load.
+  useEffect(() => {
+    const stored = fit.getStoredUser();
+    if (stored) {
+      setUser(stored);
+      setRole(roleOf(stored));
+    }
+    if (fit.getToken()) {
+      fit.auth
+        .me()
+        .then((response) => {
+          const fresh = unwrap(response);
+          setUser(fresh);
+          fit.setStoredUser(fresh);
+          setRole(roleOf(fresh));
+        })
+        .catch(() => {
+          fit.clearSession();
+          setUser(null);
+          setRole("guest");
+        });
+    }
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (!fit.getToken()) return;
+    const fresh = unwrap(await fit.auth.me());
+    setUser(fresh);
+    fit.setStoredUser(fresh);
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await fit.auth.logout();
+    } catch {
+      /* token may already be invalid */
+    }
+    fit.clearSession();
+    setUser(null);
+    setRole("guest");
+    setView("landing");
+  }, []);
+
+  const session: AppSession = {
+    user,
+    setUser: (nextUser) => {
+      setUser(nextUser);
+      if (nextUser) {
+        fit.setStoredUser(nextUser);
+        setRole(roleOf(nextUser));
+      }
+    },
+    refreshUser,
+    logout,
+    selectedJobId,
+    setSelectedJobId,
+    openConversationId,
+    setOpenConversationId,
+  };
 
   const handleNavigate = (v: View) => {
     setView(v);
@@ -5978,6 +6956,7 @@ export default function App({ initialRole = "guest", initialView = "landing" }: 
   const hideNav = view === "login" || view === "signup" || view === "admin";
 
   return (
+    <AppCtx.Provider value={session}>
     <div className="min-h-screen bg-background" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <Bootloader />
       {!hideNav && <Navbar view={view} role={role} onNavigate={handleNavigate} onRoleSwitch={handleRoleSwitch} />}
@@ -5996,5 +6975,6 @@ export default function App({ initialRole = "guest", initialView = "landing" }: 
       {view === "internships" && <InternshipsPage onNavigate={handleNavigate} />}
       {view === "admin" && <AdminDashboard onNavigate={handleNavigate} />}
     </div>
+    </AppCtx.Provider>
   );
 }

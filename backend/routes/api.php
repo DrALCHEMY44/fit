@@ -38,14 +38,38 @@ use App\Http\Controllers\Api\V1\SubscriptionPlanController;
 use App\Http\Controllers\Api\V1\SupportTicketController;
 use App\Http\Controllers\Api\V1\VerificationController;
 use App\Http\Controllers\Api\V1\WalletController;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('v1')->group(function () {
+Route::prefix('v1')->middleware('throttle:api')->group(function () {
     /*
     |----------------------------------------------------------------------
     | Public routes
     |----------------------------------------------------------------------
     */
+
+    /**
+     * Health check
+     *
+     * Liveness/readiness probe for load balancers and uptime monitors.
+     * Verifies database connectivity.
+     *
+     * @unauthenticated
+     */
+    Route::get('health', function () {
+        try {
+            DB::select('SELECT 1');
+            $database = 'ok';
+        } catch (Throwable) {
+            $database = 'unreachable';
+        }
+
+        return response()->json([
+            'status' => $database === 'ok' ? 'ok' : 'degraded',
+            'database' => $database,
+            'time' => now()->toIso8601String(),
+        ], $database === 'ok' ? 200 : 503);
+    });
     Route::prefix('auth')->group(function () {
         Route::post('register', [AuthController::class, 'register'])->middleware('throttle:10,1');
         Route::post('login', [AuthController::class, 'login'])->middleware('throttle:10,1');

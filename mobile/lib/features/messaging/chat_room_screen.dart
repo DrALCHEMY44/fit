@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/fit_api.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/data/mock_data.dart';
@@ -16,40 +20,72 @@ class ChatRoomScreen extends StatefulWidget {
 
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final TextEditingController _messageController = TextEditingController();
-  final List<ChatMessage> _messages = List.from(kChatMessages);
+  List<ChatMessage> _messages = [];
   final ScrollController _scrollController = ScrollController();
+  bool _loading = true;
+  String? _contactWarning;
+  Timer? _poller;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMessages(showSpinner: true);
+    // Basic near-realtime updates while the room is open.
+    _poller = Timer.periodic(const Duration(seconds: 8), (_) => _loadMessages());
+  }
 
   @override
   void dispose() {
+    _poller?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _sendMessage() {
-    final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+  Future<void> _loadMessages({bool showSpinner = false}) async {
+    if (showSpinner) setState(() => _loading = true);
+    try {
+      final messages = await FitApi.messages(widget.thread.id);
+      if (!mounted) return;
+      final hadNew = messages.length != _messages.length;
+      setState(() {
+        _messages = messages;
+        _loading = false;
+      });
+      if (hadNew) _scrollToEnd();
+    } on ApiException {
+      if (mounted && showSpinner) setState(() => _loading = false);
+    }
+  }
 
-    setState(() {
-      _messages.add(
-        ChatMessage(
-          id: DateTime.now().millisecondsSinceEpoch,
-          sender: 'me',
-          text: text,
-          time: '11:51 AM',
-        ),
-      );
-    });
-
-    _messageController.clear();
-    // Scroll to end
+  void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
     });
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+    _messageController.clear();
+
+    try {
+      final warning = await FitApi.sendMessage(widget.thread.id, text);
+      if (!mounted) return;
+      setState(() => _contactWarning = warning);
+      await _loadMessages();
+      _scrollToEnd();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.firstError), backgroundColor: AppColors.danger),
+      );
+    }
   }
 
   void _showScheduleModal() {
@@ -173,7 +209,16 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           ),
           // Chat timeline
           Expanded(
-            child: ListView.builder(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(color: AppColors.fitBlue))
+                : _messages.isEmpty
+                ? Center(
+                    child: Text(
+                      'No messages yet — say hello 👋',
+                      style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+                    ),
+                  )
+                : ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(16),
               itemCount: _messages.length,
@@ -231,6 +276,29 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               },
             ),
           ),
+          // Anti-bypass warning (FIT-CHAT-04)
+          if (_contactWarning != null)
+            Container(
+              width: double.infinity,
+              color: AppColors.warningLight,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.shield_outlined, size: 16, color: AppColors.warning),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _contactWarning!,
+                      style: AppTextStyles.caption.copyWith(color: AppColors.warning),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => setState(() => _contactWarning = null),
+                    child: const Icon(Icons.close, size: 14, color: AppColors.warning),
+                  ),
+                ],
+              ),
+            ),
           // Bottom message input
           Container(
             color: AppColors.surface,

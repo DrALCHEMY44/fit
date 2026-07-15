@@ -5,10 +5,21 @@ import '../../shared/widgets/fit_gradient_button.dart';
 
 /// Success confirmation screen after proposal submission.
 class ProposalSuccessScreen extends StatelessWidget {
-  const ProposalSuccessScreen({super.key});
+  const ProposalSuccessScreen({
+    super.key,
+    this.clientName = 'the client',
+    this.connectsSpent = 6,
+    this.connectsRemaining,
+  });
+
+  final String clientName;
+  final int connectsSpent;
+  final int? connectsRemaining;
 
   @override
   Widget build(BuildContext context) {
+    final remaining = connectsRemaining != null ? ' You have $connectsRemaining Connects left.' : '';
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -21,7 +32,7 @@ class ProposalSuccessScreen extends StatelessWidget {
                 Container(
                   width: 72,
                   height: 72,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppColors.successLight,
                     shape: BoxShape.circle,
                   ),
@@ -31,7 +42,7 @@ class ProposalSuccessScreen extends StatelessWidget {
                 Text('Proposal Sent!', style: AppTextStyles.headlineLarge.copyWith(color: AppColors.textPrimary)),
                 const SizedBox(height: 8),
                 Text(
-                  'Your proposal has been submitted to MTN FinTech Lab. You used 6 Connects.',
+                  'Your proposal has been submitted to $clientName. You used $connectsSpent Connects.$remaining',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
                 ),

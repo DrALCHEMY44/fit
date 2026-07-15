@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    /*
+    | Mobile Money aggregator settling payments via POST /api/v1/webhooks/payments.
+    | Webhook requests must carry X-Webhook-Signature: HMAC-SHA256 of the raw body
+    | keyed with this secret. Required in production.
+    */
+    'payments' => [
+        'webhook_secret' => env('PAYMENT_WEBHOOK_SECRET'),
+    ],
+
 ];

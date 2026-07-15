@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/fit_api.dart';
+import '../../core/api/session.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/data/mock_data.dart';
@@ -14,21 +17,56 @@ class ContractsScreen extends StatefulWidget {
 }
 
 class _ContractsScreenState extends State<ContractsScreen> {
-  late Contract _activeContract;
-  final Map<String, String> _customStatuses = {};
+  Contract? _activeContract;
+  List<Contract> _contracts = [];
+  bool _loading = true;
+  String? _error;
+
+  bool get _isFreelancerMode => Session.current?.isFreelancer ?? widget.isFreelancerMode;
 
   @override
   void initState() {
     super.initState();
-    _activeContract = kContracts[0];
+    _load();
   }
 
-  String _getStatus(Contract c, Milestone m) {
-    return _customStatuses['${c.id}_${m.id}'] ?? m.status;
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final contracts = await FitApi.contracts();
+      if (!mounted) return;
+      setState(() {
+        _contracts = contracts;
+        _activeContract = contracts.isEmpty
+            ? null
+            : contracts.firstWhere((c) => c.id == _activeContract?.id, orElse: () => contracts.first);
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.firstError;
+        _loading = false;
+      });
+    }
   }
+
+  String _getStatus(Contract c, Milestone m) => m.status;
 
   int _getApprovedCount(Contract c) {
     return c.milestones.where((m) => _getStatus(c, m) == 'approved').length;
+  }
+
+  void _showApiError(Object e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(e is ApiException ? e.firstError : 'Action failed.'),
+        backgroundColor: AppColors.danger,
+      ),
+    );
   }
 
   void _releasePayment(Contract c, Milestone ms) {
@@ -39,7 +77,7 @@ class _ContractsScreenState extends State<ContractsScreen> {
           backgroundColor: AppColors.surface,
           title: const Text('Release Payout'),
           content: Text(
-            'Are you sure you want to release ${c.currency} ${ms.amount} from Escrow to ${c.freelancer} for milestone "${ms.name}"?',
+            'Are you sure you want to release ${FitApi.formatMoney(ms.amount, c.currency)} from Escrow to ${c.freelancer} for milestone "${ms.name}"?',
             style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
           ),
           actions: [
@@ -48,17 +86,21 @@ class _ContractsScreenState extends State<ContractsScreen> {
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(context);
-                setState(() {
-                  _customStatuses['${c.id}_${ms.id}'] = 'approved';
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Released ${c.currency} ${ms.amount} to ${c.freelancer}!'),
-                    backgroundColor: AppColors.success,
-                  ),
-                );
+                try {
+                  await FitApi.approveDelivery(c.id, milestoneId: ms.id);
+                  await _load();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    SnackBar(
+                      content: Text('Released ${FitApi.formatMoney(ms.amount, c.currency)} to ${c.freelancer}!'),
+                      backgroundColor: AppColors.success,
+                    ),
+                  );
+                } catch (e) {
+                  if (mounted) _showApiError(e);
+                }
               },
               child: const Text('Confirm Release', style: TextStyle(color: AppColors.success)),
             ),
@@ -76,7 +118,7 @@ class _ContractsScreenState extends State<ContractsScreen> {
           backgroundColor: AppColors.surface,
           title: const Text('Pay Contract'),
           content: Text(
-            'Are you sure you want to fund ${c.currency} ${ms.amount} into Escrow for milestone "${ms.name}"?',
+            'Fund ${FitApi.formatMoney(ms.amount, c.currency)} into Escrow for milestone "${ms.name}" via MTN Mobile Money?',
             style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
           ),
           actions: [
@@ -85,17 +127,21 @@ class _ContractsScreenState extends State<ContractsScreen> {
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(context);
-                setState(() {
-                  _customStatuses['${c.id}_${ms.id}'] = 'funded';
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Funded ${c.currency} ${ms.amount} into Escrow!'),
-                    backgroundColor: AppColors.fitBlue,
-                  ),
-                );
+                try {
+                  await FitApi.fundMilestone(ms.id);
+                  await _load();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    SnackBar(
+                      content: Text('Funded ${FitApi.formatMoney(ms.amount, c.currency)} into Escrow!'),
+                      backgroundColor: AppColors.fitBlue,
+                    ),
+                  );
+                } catch (e) {
+                  if (mounted) _showApiError(e);
+                }
               },
               child: const Text('Pay/Fund', style: TextStyle(color: AppColors.fitBlue)),
             ),
@@ -146,17 +192,26 @@ class _ContractsScreenState extends State<ContractsScreen> {
               ),
               const SizedBox(height: 24),
               GestureDetector(
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  setState(() {
-                    _customStatuses['${c.id}_${ms.id}'] = 'in_review';
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Submitted milestone to ${c.client} for review!'),
-                      backgroundColor: AppColors.success,
-                    ),
-                  );
+                  try {
+                    await FitApi.submitDelivery(
+                      c.id,
+                      milestoneId: ms.id,
+                      message: noteController.text,
+                      linkUrl: linkController.text,
+                    );
+                    await _load();
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(
+                        content: Text('Submitted milestone to ${c.client} for review!'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  } catch (e) {
+                    if (mounted) _showApiError(e);
+                  }
                 },
                 child: Container(
                   height: 48,
@@ -180,6 +235,49 @@ class _ContractsScreenState extends State<ContractsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.fitBlue));
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.wifi_off, size: 48, color: AppColors.slate300),
+              const SizedBox(height: 12),
+              Text(_error!, textAlign: TextAlign.center, style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
+              const SizedBox(height: 8),
+              TextButton(onPressed: _load, child: const Text('Try again')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final active = _activeContract;
+    if (active == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.description_outlined, size: 48, color: AppColors.slate300),
+              const SizedBox(height: 12),
+              Text(
+                'No contracts yet.\nAccepted proposals and service orders will appear here.',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Column(
       children: [
         // Dark overview card
@@ -202,14 +300,14 @@ class _ContractsScreenState extends State<ContractsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _activeContract.title,
+                            active.title,
                             style: AppTextStyles.titleMedium.copyWith(color: Colors.white),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Client: ${_activeContract.client} · Freelancer: ${_activeContract.freelancer}',
+                            'Client: ${active.client} · Freelancer: ${active.freelancer}',
                             style: AppTextStyles.caption.copyWith(color: AppColors.slate400),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -219,19 +317,23 @@ class _ContractsScreenState extends State<ContractsScreen> {
                     ),
                     const SizedBox(width: 8),
                     FitBadge(
-                      text: _activeContract.status,
-                      variant: _activeContract.status == 'active' ? BadgeVariant.success : BadgeVariant.defaultVariant,
+                      text: active.status.replaceAll('_', ' '),
+                      variant: active.status == 'active'
+                          ? BadgeVariant.success
+                          : active.status == 'pending_payment'
+                              ? BadgeVariant.warning
+                              : BadgeVariant.defaultVariant,
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    _DetailStat(label: 'Total Value', value: '${_activeContract.currency} ${_activeContract.totalAmount}'),
-                    _DetailStat(label: 'Milestones', value: '${_activeContract.milestones.length}'),
+                    _DetailStat(label: 'Total Value', value: FitApi.formatMoney(active.totalAmount, active.currency)),
+                    _DetailStat(label: 'Milestones', value: '${active.milestones.length}'),
                     _DetailStat(
                       label: 'Approved',
-                      value: '${_getApprovedCount(_activeContract)}',
+                      value: '${_getApprovedCount(active)}',
                       valueColor: AppColors.emerald,
                     ),
                   ],
@@ -256,12 +358,12 @@ class _ContractsScreenState extends State<ContractsScreen> {
         Expanded(
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: kContracts.length,
+            itemCount: _contracts.length,
             separatorBuilder: (context, index) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final c = kContracts[index];
+              final c = _contracts[index];
               final approvedCount = _getApprovedCount(c);
-              final isCurrentActive = _activeContract.id == c.id;
+              final isCurrentActive = _activeContract?.id == c.id;
 
               return Container(
                 decoration: BoxDecoration(
@@ -284,7 +386,7 @@ class _ContractsScreenState extends State<ContractsScreen> {
                       children: [
                         const SizedBox(height: 4),
                         Text(
-                          'with ${c.freelancer} · ${c.currency} ${c.totalAmount}',
+                          'with ${c.freelancer} · ${FitApi.formatMoney(c.totalAmount, c.currency)}',
                           style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
                         ),
                         const SizedBox(height: 8),
@@ -317,11 +419,13 @@ class _ContractsScreenState extends State<ContractsScreen> {
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         child: Column(
-                          children: c.milestones.map((ms) {
+                          children: c.milestones.asMap().entries.map((entry) {
+                            final msIndex = entry.key;
+                            final ms = entry.value;
                             final currentStatus = _getStatus(c, ms);
-                            final canRelease = !widget.isFreelancerMode && currentStatus == 'in_review';
-                            final canSubmit = widget.isFreelancerMode && currentStatus == 'funded';
-                            final canFund = !widget.isFreelancerMode && currentStatus == 'pending';
+                            final canRelease = !_isFreelancerMode && currentStatus == 'in_review';
+                            final canSubmit = _isFreelancerMode && currentStatus == 'funded';
+                            final canFund = !_isFreelancerMode && currentStatus == 'pending';
 
                             return Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -338,7 +442,7 @@ class _ContractsScreenState extends State<ContractsScreen> {
                                           shape: BoxShape.circle,
                                         ),
                                         alignment: Alignment.center,
-                                        child: Text('${ms.id}', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.bold)),
+                                        child: Text('${msIndex + 1}', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.bold)),
                                       ),
                                       const SizedBox(width: 12),
                                       Expanded(
@@ -355,7 +459,7 @@ class _ContractsScreenState extends State<ContractsScreen> {
                                         crossAxisAlignment: CrossAxisAlignment.end,
                                         children: [
                                           Text(
-                                            '${c.currency} ${ms.amount}',
+                                            FitApi.formatMoney(ms.amount, c.currency),
                                             style: AppTextStyles.monoCaption.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
                                           ),
                                           const SizedBox(height: 4),

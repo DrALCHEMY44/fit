@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/fit_api.dart';
+import '../../core/api/session.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/data/mock_data.dart';
@@ -9,33 +12,85 @@ import 'proposal_success_screen.dart';
 
 /// Full-screen proposal submission flow with job details, bid input, milestones, and cover letter.
 class ProposalScreen extends StatefulWidget {
-  const ProposalScreen({super.key});
+  const ProposalScreen({super.key, required this.job});
+
+  final Job job;
 
   @override
   State<ProposalScreen> createState() => _ProposalScreenState();
 }
 
 class _ProposalScreenState extends State<ProposalScreen> {
-  final _job = kJobs[0];
-  final _bidController = TextEditingController(text: '30');
+  Job get _job => widget.job;
+  final _bidController = TextEditingController();
+  final _daysController = TextEditingController(text: '14');
   final _coverController = TextEditingController();
   bool _jobDetailsExpanded = false;
+  bool _submitting = false;
+  String? _error;
 
-  List<Map<String, dynamic>> _milestones = [
-    {'name': 'Design & Prototype', 'amount': '600'},
-    {'name': 'Frontend Development', 'amount': '900'},
-    {'name': 'Backend & Integration', 'amount': '700'},
+  final List<Map<String, dynamic>> _milestones = [
+    {'name': '', 'amount': ''},
   ];
 
   double get _totalBid => _milestones.fold(0, (sum, m) => sum + (double.tryParse(m['amount'] ?? '0') ?? 0));
   double get _bidRate => double.tryParse(_bidController.text) ?? 0;
-  double get _netRate => _bidRate * 0.8;
+  double get _finalBid => _totalBid > 0 ? _totalBid : _bidRate;
+  double get _netRate => _finalBid * 0.9;
+
+  String get _currencySymbol => _job.budget.currency == 'USD' ? '\$' : 'XAF ';
+
+  String get _budgetLabel => _job.type == 'hourly'
+      ? '$_currencySymbol${_job.budget.min ?? 0}–$_currencySymbol${_job.budget.max ?? 0}/hr'
+      : FitApi.formatMoney(_job.budget.amount ?? 0, _job.budget.currency);
 
   @override
   void dispose() {
     _bidController.dispose();
+    _daysController.dispose();
     _coverController.dispose();
     super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_finalBid <= 0 || _coverController.text.trim().isEmpty) {
+      setState(() => _error = 'Add a bid amount and a cover letter first.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final filledMilestones = _milestones
+          .where((m) => (m['name'] as String).trim().isNotEmpty && (double.tryParse(m['amount'] ?? '0') ?? 0) > 0)
+          .map((m) => {'title': m['name'], 'amount': double.parse(m['amount'])})
+          .toList();
+
+      final result = await FitApi.submitProposal(
+        jobId: _job.id,
+        amount: _finalBid,
+        deliveryDays: int.tryParse(_daysController.text) ?? 14,
+        coverLetter: _coverController.text.trim(),
+        milestones: filledMilestones,
+      );
+      await FitApi.refreshUser();
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProposalSuccessScreen(
+            clientName: _job.client.name,
+            connectsSpent: (result['connects_spent'] as num?)?.toInt() ?? 6,
+            connectsRemaining: (result['connects_balance'] as num?)?.toInt(),
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      setState(() => _error = e.firstError);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -80,9 +135,14 @@ class _ProposalScreenState extends State<ProposalScreen> {
                             children: [
                               Row(
                                 children: [
-                                  FitBadge(text: 'Hourly', variant: BadgeVariant.blue, icon: Icons.access_time),
+                                  FitBadge(
+                                    text: _job.type == 'hourly' ? 'Hourly' : 'Fixed Price',
+                                    variant: BadgeVariant.blue,
+                                    icon: _job.type == 'hourly' ? Icons.access_time : Icons.attach_money,
+                                  ),
                                   const SizedBox(width: 6),
-                                  const FitBadge(text: 'Payment Verified', variant: BadgeVariant.success, icon: Icons.verified_user),
+                                  if (_job.client.paymentVerified)
+                                    const FitBadge(text: 'Payment Verified', variant: BadgeVariant.success, icon: Icons.verified_user),
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -109,7 +169,7 @@ class _ProposalScreenState extends State<ProposalScreen> {
                         // Budget grid
                         Row(
                           children: [
-                            _InfoTile(label: 'Budget', value: '\$${_job.budget.min}–\$${_job.budget.max}/hr'),
+                            _InfoTile(label: 'Budget', value: _budgetLabel),
                             const SizedBox(width: 8),
                             _InfoTile(label: 'Duration', value: _job.duration),
                           ],
@@ -177,9 +237,9 @@ class _ProposalScreenState extends State<ProposalScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Your Bid Rate', style: AppTextStyles.titleLarge),
+                Text('Your Bid', style: AppTextStyles.titleLarge),
                 const SizedBox(height: 4),
-                Text('The client\'s budget is \$${_job.budget.min}–\$${_job.budget.max}/hr',
+                Text('The client\'s budget is $_budgetLabel',
                     style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
                 const SizedBox(height: 16),
                 Row(
@@ -188,7 +248,7 @@ class _ProposalScreenState extends State<ProposalScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('YOUR RATE (USD/HR)', style: AppTextStyles.labelSmall.copyWith(color: AppColors.textSecondary, letterSpacing: 0.5)),
+                          Text('TOTAL BID (${_job.budget.currency})', style: AppTextStyles.labelSmall.copyWith(color: AppColors.textSecondary, letterSpacing: 0.5)),
                           const SizedBox(height: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -199,23 +259,25 @@ class _ProposalScreenState extends State<ProposalScreen> {
                             ),
                             child: Row(
                               children: [
-                                Text('\$', style: AppTextStyles.bodyLarge.copyWith(color: AppColors.textTertiary)),
+                                Text(_currencySymbol, style: AppTextStyles.bodyLarge.copyWith(color: AppColors.textTertiary)),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: TextField(
-                                    controller: _bidController,
-                                    keyboardType: TextInputType.number,
-                                    onChanged: (_) => setState(() {}),
-                                    style: AppTextStyles.monoMedium.copyWith(color: AppColors.textPrimary),
-                                    decoration: const InputDecoration(
-                                      border: InputBorder.none,
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.zero,
-                                      filled: false,
-                                    ),
-                                  ),
+                                  child: _totalBid > 0
+                                      ? Text(_totalBid.toStringAsFixed(0),
+                                          style: AppTextStyles.monoMedium.copyWith(color: AppColors.textTertiary))
+                                      : TextField(
+                                          controller: _bidController,
+                                          keyboardType: TextInputType.number,
+                                          onChanged: (_) => setState(() {}),
+                                          style: AppTextStyles.monoMedium.copyWith(color: AppColors.textPrimary),
+                                          decoration: const InputDecoration(
+                                            border: InputBorder.none,
+                                            isDense: true,
+                                            contentPadding: EdgeInsets.zero,
+                                            filled: false,
+                                          ),
+                                        ),
                                 ),
-                                Text('/ hr', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textTertiary)),
                               ],
                             ),
                           ),
@@ -227,21 +289,32 @@ class _ProposalScreenState extends State<ProposalScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("YOU'LL RECEIVE", style: AppTextStyles.labelSmall.copyWith(color: AppColors.textSecondary, letterSpacing: 0.5)),
+                          Text('DELIVERY (DAYS)', style: AppTextStyles.labelSmall.copyWith(color: AppColors.textSecondary, letterSpacing: 0.5)),
                           const SizedBox(height: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             decoration: BoxDecoration(
-                              color: AppColors.successLight,
+                              color: AppColors.slate50,
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.successBorder),
+                              border: Border.all(color: AppColors.border),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Row(
                               children: [
-                                Text('\$${_netRate.toStringAsFixed(2)}/hr',
-                                    style: AppTextStyles.monoSmall.copyWith(color: AppColors.success, fontWeight: FontWeight.w700)),
-                                Text('After 20% FIT fee', style: AppTextStyles.caption.copyWith(color: AppColors.success)),
+                                const Icon(Icons.access_time, size: 16, color: AppColors.textTertiary),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _daysController,
+                                    keyboardType: TextInputType.number,
+                                    style: AppTextStyles.monoMedium.copyWith(color: AppColors.textPrimary),
+                                    decoration: const InputDecoration(
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      filled: false,
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -249,6 +322,11 @@ class _ProposalScreenState extends State<ProposalScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'You\'ll receive ${FitApi.formatMoney(_netRate, _job.budget.currency)} after the 10% FIT commission.',
+                  style: AppTextStyles.caption.copyWith(color: AppColors.success),
                 ),
               ],
             ),
@@ -376,7 +454,7 @@ class _ProposalScreenState extends State<ProposalScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Total Project Value', style: AppTextStyles.titleSmall.copyWith(color: AppColors.textSecondary)),
-                      Text('\$${_totalBid.toStringAsFixed(0)}', style: AppTextStyles.monoMedium.copyWith(color: AppColors.textPrimary)),
+                      Text(FitApi.formatMoney(_totalBid, _job.budget.currency), style: AppTextStyles.monoMedium.copyWith(color: AppColors.textPrimary)),
                     ],
                   ),
                 ),
@@ -459,24 +537,35 @@ class _ProposalScreenState extends State<ProposalScreen> {
                     style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
                     children: [
                       const TextSpan(text: 'Submitting this proposal will use '),
-                      TextSpan(text: '6 Connects', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                      const TextSpan(text: '6 Connects', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                       const TextSpan(text: '. You have '),
-                      TextSpan(text: '42 remaining', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.fitBlue)),
+                      TextSpan(
+                        text: '${Session.current?.connectsBalance ?? 0} remaining',
+                        style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.fitBlue),
+                      ),
                       const TextSpan(text: '.'),
                     ],
                   ),
                 ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.dangerLight,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.dangerBorder),
+                    ),
+                    child: Text(_error!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.danger)),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 FitGradientButton(
-                  text: 'Submit Proposal',
+                  text: _submitting ? 'Submitting…' : 'Submit Proposal',
                   icon: Icons.send,
                   fullWidth: true,
-                  onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ProposalSuccessScreen()),
-                    );
-                  },
+                  onPressed: _submitting ? () {} : () => _submit(),
                 ),
               ],
             ),

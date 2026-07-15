@@ -93,6 +93,7 @@ class OrderAdminController extends Controller
 
         return PaymentResource::collection(
             Payment::query()
+                ->with(['payer', 'order.freelancer'])
                 ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
                 ->when($filters['provider'] ?? null, fn ($query, $provider) => $query->where('provider', $provider))
                 ->when($filters['purpose'] ?? null, fn ($query, $purpose) => $query->where('purpose', $purpose))

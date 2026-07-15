@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/fit_api.dart';
+import '../../core/api/session.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/data/mock_data.dart';
@@ -8,23 +11,104 @@ import 'talent_search_screen.dart';
 import 'job_wizard/job_wizard_screen.dart';
 
 /// Client dashboard with stats, active jobs, contracts overview.
-class ClientDashboard extends StatelessWidget {
+class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
 
   @override
+  State<ClientDashboard> createState() => _ClientDashboardState();
+}
+
+class _ClientDashboardState extends State<ClientDashboard> {
+  List<Map<String, dynamic>> _jobs = [];
+  List<Contract> _contracts = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final results = await Future.wait([
+        FitApi.myJobs(),
+        FitApi.contracts(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _jobs = results[0] as List<Map<String, dynamic>>;
+        _contracts = results[1] as List<Contract>;
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.firstError;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.fitBlue));
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_error!, textAlign: TextAlign.center, style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            TextButton(onPressed: _load, child: const Text('Try again')),
+          ],
+        ),
+      );
+    }
+
+    final user = Session.current;
+    final openContracts =
+        _contracts.where((c) => !['completed', 'cancelled'].contains(c.status)).toList();
+    final escrowHeld = _contracts
+        .where((c) => ['active', 'submitted', 'revision_requested'].contains(c.status))
+        .fold<int>(0, (sum, c) => sum + c.totalAmount);
+    final released = _contracts
+        .where((c) => c.status == 'completed')
+        .fold<int>(0, (sum, c) => sum + c.totalAmount);
+    final pendingReview =
+        _contracts.where((c) => c.status == 'submitted').fold<int>(0, (sum, c) => sum + c.totalAmount);
+    final spendMax = [escrowHeld, released, pendingReview, 1].reduce((a, b) => a > b ? a : b);
+
     final stats = [
-      _Stat('Active Jobs', '3', Icons.work_outline, AppColors.fitBlue, AppColors.blueBadgeBg),
-      _Stat('Contracts', '5', Icons.fact_check_outlined, AppColors.success, AppColors.successLight),
-      _Stat('Total Spent', '\$12.4K', Icons.attach_money, AppColors.warning, AppColors.warningLight),
-      _Stat('Hired', '11', Icons.people_outline, const Color(0xFF7C3AED), const Color(0xFFF5F3FF)),
+      _Stat('Active Jobs', '${_jobs.where((j) => ['open', 'in_selection'].contains(j['status'])).length}', Icons.work_outline, AppColors.fitBlue, AppColors.blueBadgeBg),
+      _Stat('Contracts', '${openContracts.length}', Icons.fact_check_outlined, AppColors.success, AppColors.successLight),
+      _Stat('Total Spent', FitApi.formatMoney(released), Icons.attach_money, AppColors.warning, AppColors.warningLight),
+      _Stat('Hired', '${_contracts.length}', Icons.people_outline, const Color(0xFF7C3AED), const Color(0xFFF5F3FF)),
     ];
 
-    final activeJobs = [
-      {'title': 'Full-Stack React / Node.js Developer', 'proposals': 12, 'status': 'active', 'budget': '\$25–45/hr', 'posted': 'June 18, 2025'},
-      {'title': 'Flutter Mobile App Developer', 'proposals': 5, 'status': 'active', 'budget': '\$20–35/hr', 'posted': 'June 20, 2025'},
-      {'title': 'Brand Identity Designer', 'proposals': 7, 'status': 'draft', 'budget': '\$850 fixed', 'posted': 'Draft'},
-    ];
+    final activeJobs = _jobs.map((j) {
+      final status = j['status']?.toString() ?? 'draft';
+      final currency = j['currency']?.toString() ?? 'XAF';
+      final max = double.tryParse('${j['budget_max'] ?? 0}') ?? 0;
+      return {
+        'id': j['id'],
+        'title': j['title']?.toString() ?? '',
+        'proposals': (j['proposals_count'] as num?)?.toInt() ?? 0,
+        'status': ['open', 'in_selection'].contains(status) ? 'active' : status,
+        'budget': j['budget_type'] == 'hourly'
+            ? '${FitApi.formatMoney(double.tryParse('${j['budget_min'] ?? 0}') ?? 0, currency)}–${FitApi.formatMoney(max, currency)}/hr'
+            : '${FitApi.formatMoney(max, currency)} fixed',
+        'posted': (j['published_at']?.toString() ?? 'Draft').split('T').first,
+      };
+    }).toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -38,7 +122,7 @@ class ClientDashboard extends StatelessWidget {
               children: [
                 Text('Client Dashboard', style: AppTextStyles.headlineLarge),
                 const SizedBox(height: 2),
-                Text('Afrikart Commerce · Nairobi, Kenya', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                Text(user?.name ?? 'Your workspace', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
               ],
             ),
             FitGradientButton(
@@ -200,7 +284,7 @@ class ClientDashboard extends StatelessWidget {
                   ],
                 ),
               ),
-              ...kContracts.map((c) => Container(
+              ...openContracts.map((c) => Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
                 child: Row(
@@ -218,9 +302,9 @@ class ClientDashboard extends StatelessWidget {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text('${c.currency} ${c.totalAmount}', style: AppTextStyles.monoCaption.copyWith(color: AppColors.textPrimary)),
+                        Text(FitApi.formatMoney(c.totalAmount, c.currency), style: AppTextStyles.monoCaption.copyWith(color: AppColors.textPrimary)),
                         const SizedBox(height: 2),
-                        FitBadge(text: c.status, variant: c.status == 'active' ? BadgeVariant.success : BadgeVariant.defaultVariant),
+                        FitBadge(text: c.status.replaceAll('_', ' '), variant: c.status == 'active' ? BadgeVariant.success : c.status == 'pending_payment' ? BadgeVariant.warning : BadgeVariant.defaultVariant),
                       ],
                     ),
                   ],
@@ -247,9 +331,9 @@ class ClientDashboard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               ...[
-                _SpendingRow('Escrow Held', '\$2,300', 0.6),
-                _SpendingRow('Released', '\$800', 0.3),
-                _SpendingRow('Pending Review', '\$1,200', 0.4),
+                _SpendingRow('Escrow Held', FitApi.formatMoney(escrowHeld), escrowHeld / spendMax),
+                _SpendingRow('Released', FitApi.formatMoney(released), released / spendMax),
+                _SpendingRow('Pending Review', FitApi.formatMoney(pendingReview), pendingReview / spendMax),
               ].map((r) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Column(

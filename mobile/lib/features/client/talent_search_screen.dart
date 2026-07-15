@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/fit_api.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/data/mock_data.dart';
@@ -17,21 +19,54 @@ class TalentSearchScreen extends StatefulWidget {
 }
 
 class _TalentSearchScreenState extends State<TalentSearchScreen> {
+  static const double _rateCeiling = 50000.0;
+
   final TextEditingController _searchController = TextEditingController();
   String _selectedCategory = 'All';
-  double _rateMax = 50.0;
+  double _rateMax = _rateCeiling;
   String _searchQuery = '';
+
+  List<Freelancer> _freelancers = [];
+  bool _loading = true;
+  String? _error;
 
   final List<String> _categories = ['All', 'Development', 'Design', 'Writing', 'Data', 'Marketing'];
 
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final freelancers = await FitApi.freelancers();
+      if (!mounted) return;
+      setState(() {
+        _freelancers = freelancers;
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.firstError;
+        _loading = false;
+      });
+    }
+  }
+
   List<Freelancer> get _filteredFreelancers {
-    return kFreelancers.where((f) {
+    return _freelancers.where((f) {
       final matchesSearch = _searchQuery.isEmpty ||
           f.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           f.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           f.skills.any((s) => s.toLowerCase().contains(_searchQuery.toLowerCase()));
 
-      final matchesRate = f.hourlyRate <= _rateMax;
+      final matchesRate = _rateMax >= _rateCeiling || f.hourlyRate <= _rateMax;
 
       final matchesCategory = _selectedCategory == 'All' ||
           ( _selectedCategory == 'Development' && (f.title.contains('Developer') || f.title.contains('Flutter') || f.title.contains('React'))) ||
@@ -123,7 +158,7 @@ class _TalentSearchScreenState extends State<TalentSearchScreen> {
                       TextButton(
                         onPressed: () {
                           setModalState(() {
-                            _rateMax = 50.0;
+                            _rateMax = _rateCeiling;
                           });
                           setState(() {});
                         },
@@ -132,17 +167,20 @@ class _TalentSearchScreenState extends State<TalentSearchScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text('MAX HOURLY RATE (USD)', style: AppTextStyles.labelSmall.copyWith(color: AppColors.textSecondary)),
+                  Text('MAX HOURLY RATE (XAF)', style: AppTextStyles.labelSmall.copyWith(color: AppColors.textSecondary)),
                   Row(
                     children: [
-                      Text('\$${_rateMax.round()}', style: AppTextStyles.monoMedium.copyWith(color: AppColors.textPrimary)),
+                      Text(
+                        _rateMax >= _rateCeiling ? 'Any' : FitApi.formatMoney(_rateMax),
+                        style: AppTextStyles.monoMedium.copyWith(color: AppColors.textPrimary),
+                      ),
                       Text('/hr', style: AppTextStyles.caption.copyWith(color: AppColors.textTertiary)),
                     ],
                   ),
                   Slider(
                     value: _rateMax,
-                    min: 5.0,
-                    max: 100.0,
+                    min: 1000.0,
+                    max: _rateCeiling,
                     activeColor: AppColors.fitBlue,
                     inactiveColor: AppColors.slate200,
                     onChanged: (val) {
@@ -302,7 +340,29 @@ class _TalentSearchScreenState extends State<TalentSearchScreen> {
           ),
           // Freelancer List
           Expanded(
-            child: freelancers.isEmpty
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(color: AppColors.fitBlue))
+                : _error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.wifi_off, size: 48, color: AppColors.slate300),
+                          const SizedBox(height: 12),
+                          Text(
+                            _error!,
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(onPressed: _load, child: const Text('Try again')),
+                        ],
+                      ),
+                    ),
+                  )
+                : freelancers.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(32),

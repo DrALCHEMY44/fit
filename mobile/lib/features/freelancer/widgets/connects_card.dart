@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/api/session.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../profile/buy_connects_screen.dart';
@@ -9,6 +10,13 @@ class ConnectsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<FitUser?>(
+      valueListenable: Session.user,
+      builder: (context, user, _) => _buildCard(context, user?.connectsBalance ?? 0),
+    );
+  }
+
+  Widget _buildCard(BuildContext context, int balance) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -29,9 +37,9 @@ class ConnectsCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text('42', style: AppTextStyles.monoDisplayLarge.copyWith(color: Colors.white)),
+                Text('$balance', style: AppTextStyles.monoDisplayLarge.copyWith(color: Colors.white)),
                 const SizedBox(height: 2),
-                Text('~7 proposals remaining', style: AppTextStyles.caption.copyWith(color: AppColors.textTertiary)),
+                Text('~${balance ~/ 6} proposals remaining', style: AppTextStyles.caption.copyWith(color: AppColors.textTertiary)),
               ],
             ),
           ),

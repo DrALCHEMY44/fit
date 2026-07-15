@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/fit_api.dart';
+import '../../core/api/session.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../shared/widgets/fit_gradient_button.dart';
@@ -12,26 +15,64 @@ class WalletScreen extends StatefulWidget {
 }
 
 class _WalletScreenState extends State<WalletScreen> {
-  double _balanceUSD = 450.00;
-  static const double _xafRate = 600.0;
+  double _availableXAF = 0;
+  double _pendingXAF = 0;
+  bool _loading = true;
   bool _isWithdrawMode = false;
   bool _isSubmitting = false;
   bool _success = false;
+  double _lastWithdrawnAmount = 0;
 
   // Withdrawal form inputs
   final TextEditingController _amountController = TextEditingController();
-  String _withdrawMethod = 'momo_mtn'; // 'momo_mtn', 'momo_orange', 'paypal', 'bank'
-  final TextEditingController _phoneController = TextEditingController(text: '677890123');
+  String _withdrawMethod = 'momo_mtn'; // 'momo_mtn' | 'momo_orange'
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _paypalEmailController = TextEditingController();
   final TextEditingController _bankAccountController = TextEditingController();
   final TextEditingController _bankNameController = TextEditingController();
 
-  final List<Map<String, dynamic>> _transactions = [
-    { 'type': 'payout', 'desc': 'Milestone 2 Release — MTN Dashboard', 'amount': 1200.00, 'date': 'July 2, 2026', 'status': 'completed' },
-    { 'type': 'connects', 'desc': 'Purchased 100 Connects Pack', 'amount': -10.00, 'date': 'June 28, 2026', 'status': 'completed' },
-    { 'type': 'withdrawal', 'desc': 'Withdrawal to MTN Mobile Money', 'amount': -350.00, 'date': 'June 24, 2026', 'status': 'completed' },
-    { 'type': 'payout', 'desc': 'Milestone 1 Release — MTN Dashboard', 'amount': 800.00, 'date': 'June 15, 2026', 'status': 'completed' },
-  ];
+  List<Map<String, dynamic>> _transactions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _phoneController.text = Session.current?.phone ?? '';
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final results = await Future.wait([
+        FitApi.wallet(),
+        FitApi.walletTransactions(),
+      ]);
+      if (!mounted) return;
+      final wallet = results[0] as Map<String, dynamic>;
+      final transactions = results[1] as List<Map<String, dynamic>>;
+      setState(() {
+        _availableXAF = double.tryParse('${wallet['available_balance'] ?? 0}') ?? 0;
+        _pendingXAF = double.tryParse('${wallet['pending_balance'] ?? 0}') ?? 0;
+        _transactions = transactions.map((tx) {
+          final type = tx['type']?.toString() ?? '';
+          return {
+            'type': type == 'withdrawal'
+                ? 'withdrawal'
+                : type == 'escrow_release'
+                    ? 'payout'
+                    : 'connects',
+            'desc': tx['description']?.toString() ?? type.replaceAll('_', ' '),
+            'amount': double.tryParse('${tx['amount'] ?? 0}') ?? 0,
+            'date': (tx['created_at']?.toString() ?? '').split('T').first,
+            'status': 'completed',
+          };
+        }).toList();
+        _loading = false;
+      });
+    } on ApiException {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -43,11 +84,10 @@ class _WalletScreenState extends State<WalletScreen> {
     super.dispose();
   }
 
-  void _handleWithdraw() {
-    final amtText = _amountController.text.trim();
-    final amt = double.tryParse(amtText) ?? 0.0;
+  Future<void> _handleWithdraw() async {
+    final amt = double.tryParse(_amountController.text.trim()) ?? 0.0;
 
-    if (amt <= 0 || amt > _balanceUSD) {
+    if (amt <= 0 || amt > _availableXAF) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(amt <= 0 ? 'Please enter a valid withdrawal amount.' : 'Insufficient balance.'),
@@ -58,23 +98,26 @@ class _WalletScreenState extends State<WalletScreen> {
     }
 
     setState(() => _isSubmitting = true);
-
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-          _balanceUSD -= amt;
-          _transactions.insert(0, {
-            'type': 'withdrawal',
-            'desc': 'Withdrawal via ${_getMethodLabel()}',
-            'amount': -amt,
-            'date': 'Today',
-            'status': 'completed'
-          });
-          _success = true;
-        });
-      }
-    });
+    try {
+      await FitApi.requestWithdrawal(
+        amount: amt,
+        method: _withdrawMethod == 'momo_orange' ? 'orange_money' : 'mtn_momo',
+        accountNumber: _phoneController.text.trim(),
+      );
+      await _load();
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _lastWithdrawnAmount = amt;
+        _success = true;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.firstError), backgroundColor: AppColors.danger),
+      );
+    }
   }
 
   String _getMethodLabel() {
@@ -127,7 +170,9 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Widget _buildWalletDashboard() {
-    final balanceXAF = _balanceUSD * _xafRate;
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.fitBlue));
+    }
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -158,12 +203,12 @@ class _WalletScreenState extends State<WalletScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                '\$${_balanceUSD.toStringAsFixed(2)}',
+                FitApi.formatMoney(_availableXAF),
                 style: AppTextStyles.displayLarge.copyWith(color: Colors.white),
               ),
               const SizedBox(height: 4),
               Text(
-                '~ ${(balanceXAF).round().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} XAF',
+                '${FitApi.formatMoney(_pendingXAF)} pending in escrow',
                 style: AppTextStyles.monoMedium.copyWith(color: AppColors.fitCyan),
               ),
               const SizedBox(height: 20),
@@ -219,8 +264,8 @@ class _WalletScreenState extends State<WalletScreen> {
         ..._transactions.map((tx) {
           final isDebit = (tx['amount'] as double) < 0;
           final amountText = isDebit
-              ? '-\$${(tx['amount'] as double).abs().toStringAsFixed(2)}'
-              : '+\$${(tx['amount'] as double).toStringAsFixed(2)}';
+              ? '-${FitApi.formatMoney((tx['amount'] as double).abs())}'
+              : '+${FitApi.formatMoney(tx['amount'] as double)}';
           final icon = tx['type'] == 'withdrawal'
               ? Icons.arrow_outward
               : tx['type'] == 'connects'
@@ -267,8 +312,6 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Widget _buildWithdrawForm() {
-    final balanceXAF = _balanceUSD * _xafRate;
-
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -278,19 +321,19 @@ class _WalletScreenState extends State<WalletScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Available balance: \$${_balanceUSD.toStringAsFixed(2)} / ${balanceXAF.round().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} XAF',
+          'Available balance: ${FitApi.formatMoney(_availableXAF)}',
           style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
         ),
         const SizedBox(height: 20),
-        Text('WITHDRAWAL AMOUNT (USD)', style: AppTextStyles.labelSmall.copyWith(color: AppColors.textSecondary)),
+        Text('WITHDRAWAL AMOUNT (XAF)', style: AppTextStyles.labelSmall.copyWith(color: AppColors.textSecondary)),
         const SizedBox(height: 8),
         TextField(
           controller: _amountController,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           onChanged: (v) => setState(() {}),
           decoration: const InputDecoration(
-            hintText: 'e.g. 100.00',
-            prefixText: '\$ ',
+            hintText: 'e.g. 25000',
+            prefixText: 'XAF ',
           ),
         ),
         const SizedBox(height: 20),
@@ -304,8 +347,6 @@ class _WalletScreenState extends State<WalletScreen> {
           items: [
             {'val': 'momo_mtn', 'lbl': 'MTN Mobile Money'},
             {'val': 'momo_orange', 'lbl': 'Orange Money'},
-            {'val': 'paypal', 'lbl': 'PayPal Wallet'},
-            {'val': 'bank', 'lbl': 'Local Bank Transfer'},
           ].map((m) {
             return DropdownMenuItem<String>(
               value: m['val'],
@@ -361,9 +402,6 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Widget _buildSuccessView() {
-    final amtText = _amountController.text.trim();
-    final amt = double.tryParse(amtText) ?? 0.0;
-
     return SafeArea(
       child: Center(
         child: Padding(
@@ -384,7 +422,7 @@ class _WalletScreenState extends State<WalletScreen> {
               Text('Withdrawal Submitted!', style: AppTextStyles.headlineLarge.copyWith(color: AppColors.textPrimary)),
               const SizedBox(height: 8),
               Text(
-                'Your payout has been requested. Transfers to Mobile Money and PayPal take less than 1 hour. Bank transfers take 1-3 business days.',
+                'Your payout request is pending FIT approval. Mobile Money transfers arrive shortly after approval.',
                 textAlign: TextAlign.center,
                 style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
               ),
@@ -398,9 +436,9 @@ class _WalletScreenState extends State<WalletScreen> {
                 ),
                 child: Column(
                   children: [
-                    _RowDetail(label: 'Amount Requested', value: '\$${amt.toStringAsFixed(2)}'),
+                    _RowDetail(label: 'Amount Requested', value: FitApi.formatMoney(_lastWithdrawnAmount)),
                     _RowDetail(label: 'Withdrawal Method', value: _getMethodLabel()),
-                    _RowDetail(label: 'Reference Code', value: 'REF-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}'),
+                    _RowDetail(label: 'Payout Number', value: _phoneController.text.trim()),
                   ],
                 ),
               ),

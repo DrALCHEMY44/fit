@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/fit_api.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../shared/widgets/fit_gradient_button.dart';
@@ -16,12 +18,33 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscureText = true;
+  bool _submitting = false;
+  String? _error;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _login() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await FitApi.login(_emailController.text.trim(), _passwordController.text);
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AppShell()),
+      );
+    } on ApiException catch (e) {
+      setState(() => _error = e.firstError);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -88,15 +111,26 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 24),
+              if (_error != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.dangerLight,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.dangerBorder),
+                  ),
+                  child: Text(
+                    _error!,
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.danger),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               FitGradientButton(
-                text: 'Log In',
+                text: _submitting ? 'Signing in…' : 'Log In',
                 fullWidth: true,
-                onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AppShell()),
-                  );
-                },
+                onPressed: _submitting ? () {} : () => _login(),
               ),
               const SizedBox(height: 24),
               Row(

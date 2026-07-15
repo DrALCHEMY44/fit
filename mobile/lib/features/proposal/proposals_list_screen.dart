@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/fit_api.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../shared/widgets/fit_badge.dart';
@@ -15,41 +17,72 @@ class _ProposalsListScreenState extends State<ProposalsListScreen> {
   int _activeTab = 0;
   final List<String> _tabs = ['Active', 'Submitted', 'Offers'];
 
-  final List<Map<String, dynamic>> _activeProposals = [
-    {
-      'title': 'Offline-First AgriTech Mobile App using Flutter',
-      'client': 'GreenField AgriTech',
-      'initials': 'GA',
-      'gradient': AppColors.gradientGreen,
-      'date': 'Submitted Jul 1, 2026',
-      'bid': '\$30/hr',
-      'status': 'Interviewing',
-      'badgeColor': BadgeVariant.blue,
-    },
-    {
-      'title': 'Bilingual Content Writer — French & English Tech Articles',
-      'client': 'TechAfrique Media',
-      'initials': 'TM',
-      'gradient': AppColors.gradientAmber,
-      'date': 'Submitted Jun 29, 2026',
-      'bid': 'XAF 150,000 fixed',
-      'status': 'Pending Review',
-      'badgeColor': BadgeVariant.defaultVariant,
-    },
-  ];
+  List<Map<String, dynamic>> _activeProposals = [];
+  List<Map<String, dynamic>> _offers = [];
+  bool _loading = true;
+  String? _error;
 
-  final List<Map<String, dynamic>> _offers = [
-    {
-      'title': 'CEMAC Mobile Money Dashboard Integration',
-      'client': 'MTN FinTech Lab',
-      'initials': 'MF',
-      'gradient': AppColors.gradientBlue,
-      'date': 'Received Jun 30, 2026',
-      'bid': '\$45/hr',
-      'status': 'Offer Received',
-      'badgeColor': BadgeVariant.success,
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final proposals = await FitApi.myProposals();
+      if (!mounted) return;
+
+      Map<String, dynamic> mapRow(Map<String, dynamic> p) {
+        final job = p['job'] as Map<String, dynamic>?;
+        final status = p['status']?.toString() ?? 'pending';
+        final clientName =
+            (job?['client'] as Map<String, dynamic>?)?['name']?.toString() ?? 'FIT Client';
+        final amount = double.tryParse('${p['amount'] ?? 0}') ?? 0;
+        return {
+          'title': job?['title']?.toString() ?? 'Job proposal',
+          'client': clientName,
+          'initials': clientName.trim().split(RegExp(r'\s+')).take(2).map((w) => w[0].toUpperCase()).join(),
+          'gradient': FitApi.gradientFor((p['id'] as num?)?.toInt() ?? 0),
+          'date': 'Submitted ${(p['created_at']?.toString() ?? '').split('T').first}',
+          'bid': FitApi.formatMoney(amount, p['currency']?.toString() ?? 'XAF'),
+          'status': status == 'shortlisted'
+              ? 'Interviewing'
+              : status == 'accepted'
+                  ? 'Offer Received'
+                  : status == 'declined'
+                      ? 'Declined'
+                      : 'Pending Review',
+          'badgeColor': status == 'shortlisted'
+              ? BadgeVariant.blue
+              : status == 'accepted'
+                  ? BadgeVariant.success
+                  : status == 'declined'
+                      ? BadgeVariant.danger
+                      : BadgeVariant.defaultVariant,
+        };
+      }
+
+      setState(() {
+        _activeProposals = proposals
+            .where((p) => ['pending', 'shortlisted'].contains(p['status']))
+            .map(mapRow)
+            .toList();
+        _offers = proposals.where((p) => p['status'] == 'accepted').map(mapRow).toList();
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.firstError;
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -107,7 +140,20 @@ class _ProposalsListScreenState extends State<ProposalsListScreen> {
         ),
         // Proposals list
         Expanded(
-          child: list.isEmpty
+          child: _loading
+              ? const Center(child: CircularProgressIndicator(color: AppColors.fitBlue))
+              : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(_error!, textAlign: TextAlign.center, style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
+                      const SizedBox(height: 8),
+                      TextButton(onPressed: _load, child: const Text('Try again')),
+                    ],
+                  ),
+                )
+              : list.isEmpty
               ? Center(
                   child: Text(
                     'No proposals found in this section.',

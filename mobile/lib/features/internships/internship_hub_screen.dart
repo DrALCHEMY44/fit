@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/fit_api.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../shared/widgets/fit_badge.dart';
@@ -16,68 +18,50 @@ class _InternshipHubScreenState extends State<InternshipHubScreen> {
   String _searchQuery = '';
   String _typeFilter = 'All';
 
-  final List<Map<String, dynamic>> _internships = [
-    {
-      'id': 1,
-      'title': 'Frontend Engineering Intern',
-      'company': 'MTN Innovation Lab',
-      'location': 'Douala, Cameroon',
-      'duration': '3 months',
-      'stipend': 'XAF 150,000/mo',
-      'skills': ['React', 'TypeScript', 'CSS'],
-      'type': 'Hybrid',
-      'paid': true,
-      'description': 'Work alongside senior engineers building the next generation of mobile money dashboards. Learn React, design systems, and agile development.'
-    },
-    {
-      'id': 2,
-      'title': 'UI/UX Design Intern',
-      'company': 'Afrikart Commerce',
-      'location': 'Yaoundé, Cameroon',
-      'duration': '4 months',
-      'stipend': 'XAF 120,000/mo',
-      'skills': ['Figma', 'Adobe XD', 'Prototyping'],
-      'type': 'Remote',
-      'paid': true,
-      'description': 'Help redesign the Afrikart mobile app experience. Collaborate with product managers on user research and prototyping.'
-    },
-    {
-      'id': 3,
-      'title': 'Data Science Intern',
-      'company': 'GreenField AgriTech',
-      'location': 'Bamenda, Cameroon',
-      'duration': '6 months',
-      'stipend': 'XAF 200,000/mo',
-      'skills': ['Python', 'SQL', 'Machine Learning'],
-      'type': 'On-site',
-      'paid': true,
-      'description': 'Analyze agricultural data from IoT sensors across 3 West African countries. Build predictive models for crop yield optimization.'
-    },
-    {
-      'id': 4,
-      'title': 'Backend Developer Intern',
-      'company': 'CloudOps Cameroon',
-      'location': 'Bafoussam, Cameroon',
-      'duration': '3 months',
-      'stipend': 'XAF 100,000/mo',
-      'skills': ['Node.js', 'PostgreSQL', 'Docker'],
-      'type': 'Remote',
-      'paid': true,
-      'description': 'Contribute to our cloud infrastructure platform. Write APIs, optimize databases, and learn DevOps best practices.'
-    },
-    {
-      'id': 5,
-      'title': 'Content & Social Media Intern',
-      'company': 'TechAfrique Media',
-      'location': 'Douala, Cameroon',
-      'duration': '3 months',
-      'stipend': 'Unpaid',
-      'skills': ['Content Writing', 'French', 'SEO'],
-      'type': 'Remote',
-      'paid': false,
-      'description': 'Create bilingual content about Africa\'s tech ecosystem. Manage social media accounts and track engagement analytics.'
-    },
-  ];
+  List<Map<String, dynamic>> _internships = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final internships = await FitApi.internships();
+      if (!mounted) return;
+      setState(() {
+        _internships = internships.map((json) {
+          final type = json['type']?.toString() ?? 'onsite';
+          return {
+            'id': json['id'],
+            'title': json['title']?.toString() ?? '',
+            'company': json['company_name']?.toString() ?? '',
+            'location': json['location']?.toString() ?? 'Cameroon',
+            'duration': json['duration']?.toString() ?? '—',
+            'stipend': json['stipend']?.toString() ?? (json['is_paid'] == true ? 'Paid' : 'Unpaid'),
+            'skills': (json['skills'] as List?)?.map((s) => s.toString()).toList() ?? <String>[],
+            'type': type == 'remote' ? 'Remote' : type == 'hybrid' ? 'Hybrid' : 'On-site',
+            'paid': json['is_paid'] == true,
+            'description': json['description']?.toString() ?? '',
+          };
+        }).toList();
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.firstError;
+        _loading = false;
+      });
+    }
+  }
 
   List<Map<String, dynamic>> get _filteredInternships {
     return _internships.where((intern) {
@@ -160,14 +144,26 @@ class _InternshipHubScreenState extends State<InternshipHubScreen> {
               FitGradientButton(
                 text: 'Submit Application',
                 fullWidth: true,
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Application submitted successfully for ${internship['title']}!'),
-                      backgroundColor: AppColors.success,
-                    ),
-                  );
+                  try {
+                    await FitApi.applyToInternship(
+                      internship['id'] as int,
+                      coverLetter: noteController.text.trim().isEmpty ? null : noteController.text.trim(),
+                    );
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(
+                        content: Text('Application submitted successfully for ${internship['title']}!'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  } on ApiException catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(content: Text(e.firstError), backgroundColor: AppColors.danger),
+                    );
+                  }
                 },
               ),
             ],
@@ -280,7 +276,20 @@ class _InternshipHubScreenState extends State<InternshipHubScreen> {
           ),
           // Internships List
           Expanded(
-            child: list.isEmpty
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(color: AppColors.fitBlue))
+                : _error != null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(_error!, textAlign: TextAlign.center, style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
+                        const SizedBox(height: 8),
+                        TextButton(onPressed: _load, child: const Text('Try again')),
+                      ],
+                    ),
+                  )
+                : list.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(32),

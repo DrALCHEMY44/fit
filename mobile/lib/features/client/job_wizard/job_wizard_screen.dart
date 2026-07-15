@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../../core/api/api_client.dart';
+import '../../../core/api/fit_api.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/data/mock_data.dart';
 import '../../../shared/widgets/fit_gradient_button.dart';
 
 class JobWizardScreen extends StatefulWidget {
@@ -14,6 +15,11 @@ class JobWizardScreen extends StatefulWidget {
 class _JobWizardScreenState extends State<JobWizardScreen> {
   int _currentStep = 1;
   bool _published = false;
+  bool _publishing = false;
+
+  List<Map<String, dynamic>> _categories = [];
+  List<Map<String, dynamic>> _apiSkills = [];
+  int? _selectedCategoryId;
 
   // Form Fields State
   final TextEditingController _titleController = TextEditingController();
@@ -27,9 +33,28 @@ class _JobWizardScreenState extends State<JobWizardScreen> {
   String _selectedDuration = '';
   String _selectedExperienceLevel = '';
   String _budgetType = 'fixed'; // 'fixed' or 'hourly'
-  String _selectedCurrency = 'USD';
+  String _selectedCurrency = 'XAF';
 
   final List<String> _steps = ['Title', 'Skills', 'Scope', 'Budget'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCatalog();
+  }
+
+  Future<void> _loadCatalog() async {
+    try {
+      final results = await Future.wait([FitApi.categories(), FitApi.skills()]);
+      if (!mounted) return;
+      setState(() {
+        _categories = results[0];
+        _apiSkills = results[1];
+      });
+    } on ApiException {
+      // Catalog loads lazily; publishing revalidates.
+    }
+  }
 
   @override
   void dispose() {
@@ -43,7 +68,7 @@ class _JobWizardScreenState extends State<JobWizardScreen> {
 
   bool get _canProceed {
     if (_currentStep == 1) {
-      return _titleController.text.length > 5 && _selectedCategory.isNotEmpty;
+      return _titleController.text.length > 5 && _selectedCategoryId != null;
     }
     if (_currentStep == 2) {
       return _selectedSkills.isNotEmpty;
@@ -61,11 +86,50 @@ class _JobWizardScreenState extends State<JobWizardScreen> {
     return false;
   }
 
+  Future<void> _publish() async {
+    if (_selectedCategoryId == null) return;
+    setState(() => _publishing = true);
+    try {
+      final skillIds = _apiSkills
+          .where((s) => _selectedSkills.contains(s['name']))
+          .map((s) => s['id'])
+          .toList();
+      final fixed = double.tryParse(_fixedBudgetController.text) ?? 0;
+      await FitApi.createJob({
+        'title': _titleController.text.trim(),
+        'description': _descController.text.trim().isEmpty
+            ? _titleController.text.trim()
+            : _descController.text.trim(),
+        'category_id': _selectedCategoryId,
+        'budget_type': _budgetType,
+        'budget_min': _budgetType == 'fixed' ? fixed : double.tryParse(_minHourlyController.text) ?? 0,
+        'budget_max': _budgetType == 'fixed' ? fixed : double.tryParse(_maxHourlyController.text) ?? 0,
+        'currency': _selectedCurrency,
+        'duration': _selectedDuration,
+        'experience_level': _selectedExperienceLevel.toLowerCase(),
+        'mode': 'remote',
+        'skill_ids': skillIds,
+        'publish': true,
+      });
+      if (!mounted) return;
+      setState(() {
+        _publishing = false;
+        _published = true;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _publishing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.firstError), backgroundColor: AppColors.danger),
+      );
+    }
+  }
+
   void _nextStep() {
     if (_currentStep < 4) {
       setState(() => _currentStep++);
     } else {
-      setState(() => _published = true);
+      _publish();
     }
   }
 
@@ -236,7 +300,7 @@ class _JobWizardScreenState extends State<JobWizardScreen> {
                 if (_currentStep > 1) const SizedBox(width: 12),
                 Expanded(
                   child: FitGradientButton(
-                    text: _currentStep == 4 ? 'Publish Job Post' : 'Continue',
+                    text: _publishing ? 'Publishing…' : _currentStep == 4 ? 'Publish Job Post' : 'Continue',
                     onPressed: _canProceed ? _nextStep : null,
                   ),
                 ),
@@ -266,27 +330,25 @@ class _JobWizardScreenState extends State<JobWizardScreen> {
             const SizedBox(height: 20),
             Text('Category *', style: AppTextStyles.titleLarge),
             const SizedBox(height: 12),
+            if (_categories.isEmpty)
+              const Center(child: Padding(
+                padding: EdgeInsets.all(12),
+                child: CircularProgressIndicator(color: AppColors.fitBlue),
+              )),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: [
-                'Web Development',
-                'Mobile Development',
-                'Design & Creative',
-                'Writing & Translation',
-                'Data & Analytics',
-                'Admin Support',
-                'Sales & Marketing',
-                'Engineering & IT',
-              ].map((cat) {
-                final isSelected = _selectedCategory == cat;
+              children: _categories.map((cat) {
+                final name = cat['name_en']?.toString() ?? '';
+                final isSelected = _selectedCategoryId == cat['id'];
                 return ChoiceChip(
-                  label: Text(cat),
+                  label: Text(name),
                   selected: isSelected,
                   selectedColor: AppColors.blueBadgeBg,
                   onSelected: (selected) {
                     setState(() {
-                      _selectedCategory = selected ? cat : '';
+                      _selectedCategoryId = selected ? cat['id'] as int : null;
+                      _selectedCategory = selected ? name : '';
                     });
                   },
                 );
@@ -315,7 +377,7 @@ class _JobWizardScreenState extends State<JobWizardScreen> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: kWizardSkills.map((skill) {
+              children: _apiSkills.map((s) => s['name'].toString()).map((skill) {
                 final isSelected = _selectedSkills.contains(skill);
                 return FilterChip(
                   label: Text(skill),
@@ -466,7 +528,7 @@ class _JobWizardScreenState extends State<JobWizardScreen> {
             Text('Currency', style: AppTextStyles.titleLarge),
             const SizedBox(height: 12),
             Row(
-              children: ['USD', 'XAF', 'EUR'].map((cur) {
+              children: ['XAF', 'USD'].map((cur) {
                 final isSelected = _selectedCurrency == cur;
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),

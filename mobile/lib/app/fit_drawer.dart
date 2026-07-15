@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../core/api/fit_api.dart';
+import '../core/api/session.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
 import '../shared/widgets/fit_avatar.dart';
@@ -42,7 +44,7 @@ class FitDrawer extends StatelessWidget {
                   Row(
                     children: [
                       FitAvatar.lg(
-                        initials: isFreelancerMode ? 'DN' : 'AF',
+                        initials: Session.current?.initials ?? 'FI',
                         gradient: AppColors.gradientBlue,
                         showOnline: true,
                       ),
@@ -55,12 +57,12 @@ class FitDrawer extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    isFreelancerMode ? 'Diane Ngono' : 'Afrikart Commerce',
+                    Session.current?.name ?? 'FIT User',
                     style: AppTextStyles.titleLarge.copyWith(color: Colors.white),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    isFreelancerMode ? 'Senior React Developer' : 'Client Account',
+                    Session.current?.title ?? (isFreelancerMode ? 'Freelancer Account' : 'Client Account'),
                     style: AppTextStyles.bodySmall.copyWith(color: Colors.white70),
                   ),
                   const SizedBox(height: 12),
@@ -242,10 +244,11 @@ class FitDrawer extends StatelessWidget {
                 icon: Icons.logout,
                 label: 'Log Out',
                 color: AppColors.danger,
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushAndRemoveUntil(
-                    context,
+                onTap: () async {
+                  final navigator = Navigator.of(context);
+                  navigator.pop();
+                  await FitApi.logout();
+                  navigator.pushAndRemoveUntil(
                     MaterialPageRoute(builder: (_) => const LoginScreen()),
                     (route) => false,
                   );

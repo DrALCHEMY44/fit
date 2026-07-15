@@ -107,6 +107,8 @@ class PaymentController extends Controller
      */
     public function confirmSandbox(Request $request, string $reference, PaymentService $paymentService): PaymentResource
     {
+        abort_if(app()->isProduction(), 404);
+
         $payment = Payment::query()->where('reference', $reference)->firstOrFail();
 
         abort_unless(

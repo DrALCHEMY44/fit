@@ -26,6 +26,8 @@ class PaymentResource extends JsonResource
             'phone_number' => $this->phone_number,
             'provider_ref' => $this->provider_ref,
             'status' => $this->status,
+            'payer' => new UserResource($this->whenLoaded('payer')),
+            'order' => new OrderResource($this->whenLoaded('order')),
             'paid_at' => $this->paid_at,
             'created_at' => $this->created_at,
         ];

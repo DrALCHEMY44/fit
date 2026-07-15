@@ -26,6 +26,8 @@ class PaymentWebhookController extends Controller
      */
     public function handle(Request $request, PaymentService $paymentService): JsonResponse
     {
+        $this->verifySignature($request);
+
         $data = $request->validate([
             /** The FIT payment reference passed when initiating. @example FIT-PAY-AB12CD34EF56 */
             'reference' => ['required', 'string'],
@@ -52,5 +54,30 @@ class PaymentWebhookController extends Controller
             : $paymentService->fail($payment, $data['reason'] ?? null);
 
         return response()->json(['message' => 'Processed.']);
+    }
+
+    /**
+     * Rejects payloads whose HMAC-SHA256 signature (hex, over the raw body)
+     * does not match PAYMENT_WEBHOOK_SECRET. Skipped when no secret is
+     * configured so local sandboxes keep working.
+     */
+    private function verifySignature(Request $request): void
+    {
+        $secret = (string) config('services.payments.webhook_secret');
+
+        if ($secret === '') {
+            abort_if(app()->isProduction(), 503, 'Payment webhook secret is not configured.');
+
+            return;
+        }
+
+        $expected = hash_hmac('sha256', $request->getContent(), $secret);
+        $provided = (string) $request->header('X-Webhook-Signature');
+
+        abort_unless(
+            $provided !== '' && hash_equals($expected, $provided),
+            401,
+            'Invalid webhook signature.',
+        );
     }
 }

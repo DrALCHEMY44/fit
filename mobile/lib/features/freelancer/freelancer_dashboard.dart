@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/fit_api.dart';
+import '../../core/api/session.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/data/mock_data.dart';
@@ -18,30 +23,102 @@ class FreelancerDashboard extends StatefulWidget {
 
 class _FreelancerDashboardState extends State<FreelancerDashboard> {
   int _activeTab = 0;
-  final Set<int> _savedJobs = {2, 5}; // Pre-saved job IDs
+  final Set<int> _savedJobs = {};
   bool _statsExpanded = true;
+
+  List<Job> _jobs = [];
+  bool _loading = true;
+  String? _error;
+  int _proposalCount = 0;
+  int _activeContracts = 0;
+  Timer? _searchDebounce;
+  String _search = '';
 
   final _tabs = ['My Feed', 'Best Matches', 'Saved'];
 
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final results = await Future.wait([
+        FitApi.jobs(search: _search),
+        FitApi.savedJobIds(),
+        FitApi.myProposals().catchError((_) => <Map<String, dynamic>>[]),
+        FitApi.contracts().catchError((_) => <Contract>[]),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _jobs = results[0] as List<Job>;
+        _savedJobs
+          ..clear()
+          ..addAll(results[1] as Set<int>);
+        _proposalCount = (results[2] as List).length;
+        _activeContracts =
+            (results[3] as List<Contract>).where((c) => c.status == 'active').length;
+        _loading = false;
+      });
+      FitApi.refreshUser().catchError((_) {});
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.firstError;
+        _loading = false;
+      });
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 500), () {
+      _search = value;
+      _load();
+    });
+  }
+
   List<Job> get _displayJobs {
     if (_activeTab == 2) {
-      return kJobs.where((j) => _savedJobs.contains(j.id)).toList();
+      return _jobs.where((j) => _savedJobs.contains(j.id)).toList();
     }
-    return kJobs;
+    if (_activeTab == 1) {
+      final sorted = [..._jobs]..sort((a, b) => a.proposals.compareTo(b.proposals));
+      return sorted;
+    }
+    return _jobs;
   }
 
   void _toggleSave(int jobId) {
+    final wasSaved = _savedJobs.contains(jobId);
     setState(() {
-      if (_savedJobs.contains(jobId)) {
-        _savedJobs.remove(jobId);
-      } else {
-        _savedJobs.add(jobId);
+      wasSaved ? _savedJobs.remove(jobId) : _savedJobs.add(jobId);
+    });
+    FitApi.toggleSaveJob(jobId, !wasSaved).catchError((_) {
+      if (mounted) {
+        setState(() {
+          wasSaved ? _savedJobs.add(jobId) : _savedJobs.remove(jobId);
+        });
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = Session.current;
+    final completion = (user?.profileCompletion ?? 0) / 100;
+
     return CustomScrollView(
       slivers: [
         // ── Profile Stats Banner ──
@@ -67,32 +144,39 @@ class _FreelancerDashboardState extends State<FreelancerDashboard> {
                         padding: const EdgeInsets.all(16),
                         child: Row(
                           children: [
-                            const FitAvatar.lg(
-                              initials: 'DN',
+                            FitAvatar.lg(
+                              initials: user?.initials ?? 'FI',
                               gradient: AppColors.gradientBlue,
-                              showOnline: true,
+                              showOnline: user?.availability == 'available',
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Diane Ngono', style: AppTextStyles.titleLarge.copyWith(color: AppColors.textPrimary)),
+                                  Text(user?.name ?? 'Freelancer', style: AppTextStyles.titleLarge.copyWith(color: AppColors.textPrimary)),
                                   const SizedBox(height: 2),
-                                  Text('Senior React Developer', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                                  Text(user?.title ?? 'Complete your profile', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
                                   const SizedBox(height: 4),
                                   Row(
                                     children: [
                                       Container(
                                         width: 8,
                                         height: 8,
-                                        decoration: const BoxDecoration(
-                                          color: AppColors.emerald,
+                                        decoration: BoxDecoration(
+                                          color: user?.availability == 'available' ? AppColors.emerald : AppColors.warning,
                                           shape: BoxShape.circle,
                                         ),
                                       ),
                                       const SizedBox(width: 6),
-                                      Text('Available', style: AppTextStyles.labelSmall.copyWith(color: AppColors.success, fontWeight: FontWeight.w600)),
+                                      Text(
+                                        user?.availability == 'busy'
+                                            ? 'Busy'
+                                            : user?.availability == 'unavailable'
+                                                ? 'Unavailable'
+                                                : 'Available',
+                                        style: AppTextStyles.labelSmall.copyWith(color: AppColors.success, fontWeight: FontWeight.w600),
+                                      ),
                                     ],
                                   ),
                                 ],
@@ -118,24 +202,25 @@ class _FreelancerDashboardState extends State<FreelancerDashboard> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text('Profile completeness', style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
-                                Text('87%', style: AppTextStyles.labelMedium.copyWith(color: AppColors.fitBlue, fontWeight: FontWeight.w700)),
+                                Text('${user?.profileCompletion ?? 0}%', style: AppTextStyles.labelMedium.copyWith(color: AppColors.fitBlue, fontWeight: FontWeight.w700)),
                               ],
                             ),
                             const SizedBox(height: 6),
                             ClipRRect(
                               borderRadius: BorderRadius.circular(100),
                               child: LinearProgressIndicator(
-                                value: 0.87,
+                                value: completion,
                                 minHeight: 6,
                                 backgroundColor: AppColors.slate100,
                                 valueColor: const AlwaysStoppedAnimation<Color>(AppColors.fitBlue),
                               ),
                             ),
                             const SizedBox(height: 4),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text('Add a portfolio item to reach 100%', style: AppTextStyles.caption.copyWith(color: AppColors.textTertiary)),
-                            ),
+                            if ((user?.profileCompletion ?? 0) < 100)
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text('Add skills and portfolio items to reach 100%', style: AppTextStyles.caption.copyWith(color: AppColors.textTertiary)),
+                              ),
                             const SizedBox(height: 16),
 
                             // Stats row
@@ -146,9 +231,9 @@ class _FreelancerDashboardState extends State<FreelancerDashboard> {
                               ),
                               child: Row(
                                 children: [
-                                  _StatPill(label: 'Proposals', value: '6'),
-                                  _StatPill(label: 'Connects', value: '42'),
-                                  _StatPill(label: 'Active', value: '2'),
+                                  _StatPill(label: 'Proposals', value: '$_proposalCount'),
+                                  _StatPill(label: 'Connects', value: '${user?.connectsBalance ?? 0}'),
+                                  _StatPill(label: 'Active', value: '$_activeContracts'),
                                 ],
                               ),
                             ),
@@ -181,6 +266,7 @@ class _FreelancerDashboardState extends State<FreelancerDashboard> {
                 Expanded(
                   child: FitSearchBar(
                     hint: 'Search jobs, skills, keywords...',
+                    onChanged: _onSearchChanged,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -247,7 +333,33 @@ class _FreelancerDashboardState extends State<FreelancerDashboard> {
         ),
 
         // ── Job Cards List ──
-        if (_displayJobs.isEmpty)
+        if (_loading)
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(48),
+              child: Center(child: CircularProgressIndicator(color: AppColors.fitBlue)),
+            ),
+          )
+        else if (_error != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                children: [
+                  const Icon(Icons.wifi_off, size: 48, color: AppColors.slate300),
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(onPressed: _load, child: const Text('Try again')),
+                ],
+              ),
+            ),
+          )
+        else if (_displayJobs.isEmpty)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(32),
@@ -256,7 +368,9 @@ class _FreelancerDashboardState extends State<FreelancerDashboard> {
                   const Icon(Icons.bookmark_outline, size: 48, color: AppColors.slate300),
                   const SizedBox(height: 12),
                   Text(
-                    'No saved jobs yet.\nBookmark jobs to see them here.',
+                    _activeTab == 2
+                        ? 'No saved jobs yet.\nBookmark jobs to see them here.'
+                        : 'No jobs match your search yet.',
                     textAlign: TextAlign.center,
                     style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
                   ),
@@ -279,8 +393,8 @@ class _FreelancerDashboardState extends State<FreelancerDashboard> {
                   onApply: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const ProposalScreen()),
-                    );
+                      MaterialPageRoute(builder: (_) => ProposalScreen(job: job)),
+                    ).then((_) => _load());
                   },
                 );
               },
