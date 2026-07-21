@@ -1,7 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -28,8 +27,8 @@ class ApiException implements Exception {
 
 /// Thin HTTP client for the FIT Laravel API.
 ///
-/// Base URL priority: `--dart-define=FIT_API_URL=...`, then a platform
-/// default (Android emulators reach the host machine via 10.0.2.2).
+/// Uses the production API by default. A local or staging API can be supplied
+/// at build time with `--dart-define=FIT_API_URL=...`.
 class ApiClient {
   ApiClient._();
 
@@ -38,12 +37,10 @@ class ApiClient {
   static const _tokenKey = 'fit_token';
 
   static const String _definedUrl = String.fromEnvironment('FIT_API_URL');
+  static const String productionBaseUrl = 'https://api.fit.fobs.dev/api/v1';
 
-  String get baseUrl {
-    if (_definedUrl.isNotEmpty) return _definedUrl;
-    if (!kIsWeb && Platform.isAndroid) return 'https://api.fit.fobs.dev/api/v1';
-    return 'https://api.fit.fobs.dev/api/v1';
-  }
+  String get baseUrl =>
+      _definedUrl.isNotEmpty ? _definedUrl : productionBaseUrl;
 
   String? _token;
 
@@ -102,10 +99,21 @@ class ApiClient {
     try {
       final request = http.Request(method, uri)..headers.addAll(headers);
       if (body != null) request.body = jsonEncode(body);
-      response =
-          await http.Response.fromStream(await request.send().timeout(const Duration(seconds: 20)));
-    } catch (_) {
-      throw ApiException(0, 'Network error — check your connection and the FIT API URL.');
+      response = await http.Response.fromStream(
+        await request.send().timeout(const Duration(seconds: 20)),
+      );
+    } on TimeoutException {
+      throw ApiException(
+        0,
+        'Connection to ${uri.host} timed out. Check your internet connection.',
+      );
+    } on http.ClientException catch (error) {
+      throw ApiException(
+        0,
+        'Could not connect to ${uri.host}: ${error.message}',
+      );
+    } catch (error) {
+      throw ApiException(0, 'Could not connect to ${uri.host}: $error');
     }
 
     dynamic payload;
@@ -120,9 +128,12 @@ class ApiClient {
     if (response.statusCode >= 400) {
       if (response.statusCode == 401) await clearToken();
       final message = payload is Map<String, dynamic>
-          ? (payload['message']?.toString() ?? 'Request failed (${response.statusCode})')
+          ? (payload['message']?.toString() ??
+                'Request failed (${response.statusCode})')
           : 'Request failed (${response.statusCode})';
-      final errors = payload is Map<String, dynamic> && payload['errors'] is Map<String, dynamic>
+      final errors =
+          payload is Map<String, dynamic> &&
+              payload['errors'] is Map<String, dynamic>
           ? payload['errors'] as Map<String, dynamic>
           : <String, dynamic>{};
       throw ApiException(response.statusCode, message, errors);

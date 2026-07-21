@@ -7,9 +7,9 @@ return [
     | Cross-Origin Resource Sharing (CORS) Configuration
     |--------------------------------------------------------------------------
     |
-    | The web dashboard and any browser client must be listed here. Set
-    | FRONTEND_URL (comma-separated for several origins) per environment.
-    | Mobile apps are unaffected by CORS.
+    | Set FRONTEND_URL (comma-separated for several deployed browser origins)
+    | per environment. Local loopback origins are allowed by the narrow pattern
+    | below for browser-based development. Native mobile apps are unaffected.
     |
     */
 
@@ -19,7 +19,9 @@ return [
 
     'allowed_origins' => array_map('trim', explode(',', (string) env('FRONTEND_URL', 'http://localhost:3000'))),
 
-    'allowed_origins_patterns' => [],
+    'allowed_origins_patterns' => [
+        '#^http://(?:localhost|127\.0\.0\.1)(?::\d+)?\z#',
+    ],
 
     'allowed_headers' => ['*'],
 

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:freelance_interconnect/app/app.dart';
+import 'package:freelance_interconnect/core/api/api_client.dart';
 import 'package:freelance_interconnect/core/api/session.dart';
 
 void main() {
@@ -43,5 +44,10 @@ void main() {
     expect(user.connectsBalance, 24);
     expect(user.jss, 97);
     expect(user.skills, ['React', 'TypeScript']);
+  });
+
+  test('uses the production FIT API by default', () {
+    expect(ApiClient.productionBaseUrl, 'https://api.fit.fobs.dev/api/v1');
+    expect(ApiClient.instance.baseUrl, ApiClient.productionBaseUrl);
   });
 }

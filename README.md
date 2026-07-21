@@ -47,17 +47,17 @@ build time from `NEXT_PUBLIC_API_URL` (`.env.production`, committed).
 
 > Browser calls go **directly** to `https://api.fit.fobs.dev`, so the web must be
 > served from an origin the API's CORS allows. The backend's `FRONTEND_URL` is
-> currently `https://fit.fobs.dev` — deploy the web there. To also develop against
-> the live API from `http://localhost:3000`, add that origin to the backend's
-> comma-separated `FRONTEND_URL`.
+> currently `https://fit.fobs.dev` — deploy the web there. Local browser development
+> from `localhost` or `127.0.0.1` is allowed on any port by the backend's narrow
+> loopback CORS pattern.
 
 ### Mobile app
 
 ```bash
 cd mobile
 flutter pub get
-flutter run                        # iOS sim / macOS use localhost automatically
-# Android emulator reaches the host via 10.0.2.2 automatically; real devices:
+flutter run                        # Uses https://api.fit.fobs.dev/api/v1
+# To use a local backend instead:
 flutter run --dart-define=FIT_API_URL=http://<your-lan-ip>:8000/api/v1
 ```
 

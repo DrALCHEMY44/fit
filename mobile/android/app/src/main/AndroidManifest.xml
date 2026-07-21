@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required by release builds for requests to the FIT API. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="freelance_interconnect"
         android:name="${applicationName}"
