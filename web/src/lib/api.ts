@@ -4,15 +4,30 @@
  * FIT API client.
  *
  * Thin typed wrapper around fetch for the Laravel backend (/api/v1).
- * - Base URL comes from NEXT_PUBLIC_API_URL (see .env.local.example).
+ * - By default calls are made to a same-origin path (`/api/v1`, see
+ *   NEXT_PUBLIC_API_URL) which the Next.js server proxies to the FIT API
+ *   (see next.config.js `rewrites`). This keeps requests same-origin, so no
+ *   CORS configuration is needed regardless of where the web app is hosted.
+ * - Set NEXT_PUBLIC_API_URL to an absolute URL (e.g. https://api.fit.fobs.dev/api/v1)
+ *   to bypass the proxy and call the API directly — that requires the API's
+ *   CORS to allow the web app's origin.
  * - The Sanctum bearer token is kept in localStorage and attached to every
  *   authenticated request.
  * - Validation failures (422) surface field errors; auth failures (401)
  *   clear the stored session so the UI can redirect to login.
  */
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://api.fit.fobs.dev/api/v1";
+// Same-origin path by default (proxied to the API by Next.js). An absolute
+// URL here opts into direct cross-origin calls instead.
+const API_PATH = process.env.NEXT_PUBLIC_API_URL ?? "/api/v1";
+
+function apiBase(): string {
+  if (/^https?:\/\//i.test(API_PATH)) return API_PATH;
+  if (typeof window !== "undefined") return `${window.location.origin}${API_PATH}`;
+  // SSR fallback — api() only runs client-side, so this is just to keep
+  // URL construction valid if ever evaluated on the server.
+  return `https://api.fit.fobs.dev${API_PATH}`;
+}
 
 const TOKEN_KEY = "fit_token";
 const USER_KEY = "fit_user";
@@ -78,7 +93,7 @@ type RequestOptions = {
 export async function api<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, formData, params } = options;
 
-  const url = new URL(`${BASE_URL}${path}`);
+  const url = new URL(`${apiBase()}${path}`);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null && value !== "") {
