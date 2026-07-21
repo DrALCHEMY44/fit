@@ -37,11 +37,19 @@ Run tests: `php artisan test --compact` (Pest, 22 feature tests).
 ```bash
 cd web
 npm install
-cp .env.local.example .env.local   # NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+# Defaults to the live API (https://api.fit.fobs.dev/api/v1) via .env.production.
+# For a local backend instead: cp .env.local.example .env.local  and set localhost.
 npm run dev                        # http://localhost:3000  (/admin for the admin panel)
 ```
 
-Production build: `npm run build && npm start`.
+Production build: `npm run build && npm start`. The public API URL is baked in at
+build time from `NEXT_PUBLIC_API_URL` (`.env.production`, committed).
+
+> Browser calls go **directly** to `https://api.fit.fobs.dev`, so the web must be
+> served from an origin the API's CORS allows. The backend's `FRONTEND_URL` is
+> currently `https://fit.fobs.dev` — deploy the web there. To also develop against
+> the live API from `http://localhost:3000`, add that origin to the backend's
+> comma-separated `FRONTEND_URL`.
 
 ### Mobile app
 
@@ -64,7 +72,7 @@ Analyze/tests: `flutter analyze lib && flutter test`.
 | Variable | Purpose |
 |---|---|
 | `DB_DATABASE` etc. | MySQL connection (database name: `fit`) |
-| `FRONTEND_URL` | Comma-separated browser origins allowed by CORS (e.g. `https://app.fit.africa`) |
+| `FRONTEND_URL` | Comma-separated browser origins allowed by CORS (e.g. `https://fit.fobs.dev`) |
 | `SANCTUM_TOKEN_EXPIRATION_MINUTES` | API token lifetime (default 10080 = 7 days) |
 | `PAYMENT_WEBHOOK_SECRET` | Shared secret for the Mobile Money webhook signature — **required in production** |
 | `API_VERSION` | Version string shown in `/docs/api` |
@@ -74,13 +82,13 @@ Analyze/tests: `flutter analyze lib && flutter test`.
 
 | Variable | Purpose |
 |---|---|
-| `NEXT_PUBLIC_API_URL` | Base URL of the API, e.g. `https://api.fit.africa/api/v1` |
+| `NEXT_PUBLIC_API_URL` | Base URL of the API, e.g. `https://api.fit.fobs.dev/api/v1` |
 
 ### Mobile (compile-time)
 
 | Define | Purpose |
 |---|---|
-| `FIT_API_URL` | `--dart-define=FIT_API_URL=https://api.fit.africa/api/v1` at build time |
+| `FIT_API_URL` | `--dart-define=FIT_API_URL=https://api.fit.fobs.dev/api/v1` at build time |
 
 No secrets live in any repository file; tokens are stored in `localStorage` (web) and `SharedPreferences` (mobile).
 
@@ -108,7 +116,7 @@ Payment endpoints (`POST /orders/{id}/pay`, `/milestones/{id}/pay`, `/connect-pa
    `php artisan db:seed --class=GeoSeeder --force && php artisan db:seed --class=CatalogSeeder --force && php artisan db:seed --class=PlatformSeeder --force`
 5. `php artisan config:cache && php artisan route:cache && php artisan storage:link`
 6. Run a queue worker (`php artisan queue:work --tries=3`, via supervisor/systemd).
-7. Point the aggregator's webhook at `https://api…/api/v1/webhooks/payments`.
+7. Point the aggregator's webhook at `https://api.fit.fobs.dev/api/v1/webhooks/payments`.
 8. Health probe for the load balancer: `GET /api/v1/health` (checks DB) or `GET /up`.
 9. Schedule DB backups (e.g. `mysqldump` cron) before launch — spec checklist requirement.
 
@@ -119,15 +127,15 @@ Rate limiting: 120 req/min per user/IP globally, stricter limits on auth endpoin
 Standard Next.js deploy (Vercel or node server):
 
 ```bash
-NEXT_PUBLIC_API_URL=https://api.fit.africa/api/v1 npm run build
+NEXT_PUBLIC_API_URL=https://api.fit.fobs.dev/api/v1 npm run build
 npm start   # or push to Vercel with the env var set
 ```
 
 ### Mobile
 
 ```bash
-flutter build apk  --release --dart-define=FIT_API_URL=https://api.fit.africa/api/v1
-flutter build ipa  --release --dart-define=FIT_API_URL=https://api.fit.africa/api/v1
+flutter build apk  --release --dart-define=FIT_API_URL=https://api.fit.fobs.dev/api/v1
+flutter build ipa  --release --dart-define=FIT_API_URL=https://api.fit.fobs.dev/api/v1
 ```
 
 ---
