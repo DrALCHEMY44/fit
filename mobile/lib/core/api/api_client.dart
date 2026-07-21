@@ -41,8 +41,8 @@ class ApiClient {
 
   String get baseUrl {
     if (_definedUrl.isNotEmpty) return _definedUrl;
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:8000/api/v1';
-    return 'http://localhost:8000/api/v1';
+    if (!kIsWeb && Platform.isAndroid) return 'https://api.fit.fobs.dev/api/v1';
+    return 'https://api.fit.fobs.dev/api/v1';
   }
 
   String? _token;
